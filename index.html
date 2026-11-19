@@ -386,6 +386,94 @@ main { gap: 16px; padding-block: 18px 128px; }
 .shift::before { width: 6px; }
 .shift .tag.num { background: transparent; border: 0; padding: 0; font-size: 12px; color: var(--gold-light); }
 .hero { overflow: hidden; } html, body { overflow-x: hidden; }
+/* ===== Royale 3: calmer gold, clear type scale, compact cards ===== */
+:root { --fs-xl: 26px; --fs-lg: 20px; --fs-md: 16px; --fs-sm: 13px; --fs-xs: 11px; }
+/* gold only for money + the main action */
+.chip.on { background: rgba(243,229,171,.1); color: var(--gold-light); border-color: rgba(212,175,55,.55); }
+.btn.outline { color: var(--text); border-color: rgba(148,163,184,.35); }
+.tag { color: var(--muted); background: transparent; border-color: var(--line-2); }
+.week-head .label { color: var(--muted); }
+.label.c-gold { color: var(--gold-light); opacity: .85; }
+.quick i { color: var(--text); border-color: var(--line-2); }
+.quick .primary i { color: #050911; background: linear-gradient(140deg, #F3D77A, #C59B27 60%, #8F6A12); border-color: transparent; }
+.seg button.on { background: rgba(243,229,171,.1); color: var(--gold-light); }
+.pill.c-info { color: #7DD3FC; }
+/* type scale */
+.sec-title h2 { font-size: var(--fs-md); }
+.sec-title { margin-top: 10px; }
+.meta { font-size: var(--fs-sm); }
+.kpi .val { font-size: var(--fs-lg); }
+/* compact shift card */
+.shift { gap: 8px; cursor: pointer; touch-action: pan-y; transition: transform .18s ease, border-color .2s; -webkit-user-select: none; user-select: none; }
+.shift.sw-r { border-color: rgba(16,185,129,.8); box-shadow: -8px 0 24px -10px rgba(16,185,129,.7); }
+.shift.sw-l { border-color: rgba(212,175,55,.7); }
+.shift.is-cancel { opacity: .55; }
+.sc-top { display: grid; grid-template-columns: 46px 1fr auto; gap: 12px; align-items: center; }
+.sc-date { display: flex; flex-direction: column; align-items: center; line-height: 1.05; padding: 6px 0; border-radius: 12px; background: rgba(7,13,26,.7); border: 1px solid var(--line-2); }
+.sc-date i { font-style: normal; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.sc-date b { font-size: 20px; color: var(--text); }
+.sc-date span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.sc-main { min-width: 0; }
+.sc-main .site { font-size: var(--fs-md); margin: 0 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-main .meta { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-main .rt { color: var(--gold-light); font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+.sc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.sc-right .money { font-size: var(--fs-lg); }
+.sc-right .pill { font-size: 10px; padding: 3px 8px; }
+.sc-more { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: var(--fs-sm); }
+.kv > span { color: var(--muted); }
+.kv > b { font-weight: 600; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.shift.open { border-color: rgba(212,175,55,.45); }
+/* coming up */
+.uplist { padding: 4px 0; }
+.up-row { width: 100%; display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 10px 14px; text-align: left; color: var(--text); cursor: pointer; position: relative; }
+.up-row:last-child { border-bottom: 0; }
+.up-row::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 2px; background: var(--c); }
+.up-d { display: flex; flex-direction: column; align-items: center; line-height: 1.05; }
+.up-d i { font-style: normal; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.up-d b { font-size: 18px; }
+.up-m { display: flex; flex-direction: column; min-width: 0; }
+.up-m b { font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-m span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-p { color: var(--gold-light); font-size: 14px; }
+/* money strip */
+.strip { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-inline: -16px; padding: 2px 16px 6px; scroll-padding-inline: 16px; }
+.strip::-webkit-scrollbar { display: none; }
+.strip > * { scroll-snap-align: start; flex: 0 0 86%; min-width: 0; }
+.strip .kpis { display: contents; }
+.strip .kpi { flex: 0 0 calc(43% - 6px); scroll-snap-align: start; min-width: 0; }
+.strip .kpi.goal { flex-basis: 62%; }
+/* first run */
+.hero.first h3 { font-size: 22px; }
+.steps { margin: 10px 0 14px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--text); }
+.arrow-down { text-align: center; font-size: 26px; color: var(--gold); margin-top: 6px; animation: bob 1.4s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(6px); } }
+/* night dim while on a post */
+.night-btn { margin-top: 6px; padding-left: 0; color: var(--muted); }
+body.night { background: #000; }
+body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) saturate(.75); }
+@media (prefers-reduced-motion: reduce) { .arrow-down { animation: none; } }
+/* money fix: grid for the 4 cards, swipe row only for insights + chart, no stretching */
+.strip { align-items: flex-start; }
+.strip > * { flex: 0 0 88%; }
+.kpis { grid-template-columns: 1fr 1fr; align-items: stretch; }
+.kpi { display: flex; flex-direction: column; justify-content: space-between; min-height: 0; }
+.kpi.goal .ring-row svg { width: 52px; height: 52px; }
+.kpi.goal .ring-row { gap: 8px; }
+.kpi.goal .val { font-size: 16px !important; }
+.kpi .foot { margin-top: 4px; }
+/* check pass: hero time on its own line, pay timeline wraps */
+.hero .when small { font-size: .55em; opacity: .7; }
+.hero .when-sub { font-size: 18px; color: var(--muted, #9aa3b5); margin-top: 2px; }
+.hero .when-sub b { color: var(--gold, #E9C46A); font-size: 22px; }
+.tl-b .tl-c { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.tl-b .tl-c > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-b .tl-c small { font-size: 11px; }
+/* money: no sideways swipe, cards stacked full width */
+.money-stack { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.money-stack > * { width: 100%; min-width: 0; margin: 0; }
+.money-stack svg { max-width: 100%; height: auto; }
 </style></head><body>
 <div id="app">
   <header class="top"><div class="wrap">
@@ -1042,7 +1130,7 @@ main { gap: 16px; padding-block: 18px 128px; }
     contractors: [], shifts: [], payments: [], invoices: [], licences: [],
     holidays: L.QLD_HOLIDAYS.slice(),
     settings: { restHours: 8, longHours: 12, weekHours: 50, remindMin: 120, clock24: true, includeBank: false, pinHash: null,
-      lastBackup: null, bioId: null, notifyOpen: false, notified: {}, weekStartMonday: true, onboarded: false, weeklyGoal: 1500, haptics: true }
+      lastBackup: null, bioId: null, notifyOpen: false, notified: {}, weekStartMonday: true, onboarded: false, weeklyGoal: 1500, haptics: true, nightMode: 'auto' }
   });
   let S = blank();
   let saveTimer = null;
@@ -1054,7 +1142,7 @@ main { gap: 16px; padding-block: 18px 128px; }
 
   // ================= UI STATE =================
   const ui = { tab: 'home', sub: null, filter: 'ALL', q: '', chart: 'con', calMonth: null, calSel: null, scanMode: 'text', raw: '', parsed: [],
-    hint: '', ocr: null, payView: 'ledger', invDraft: null, undo: null };
+    open: new Set(), night: null, hint: '', ocr: null, payView: 'ledger', invDraft: null, undo: null };
 
   // ================= HELPERS =================
   const today = () => L.ymd(new Date());
@@ -1076,7 +1164,7 @@ main { gap: 16px; padding-block: 18px 128px; }
     const m = { UPCOMING: ['c-info', 'UPCOMING'], ON_SHIFT: ['c-ok', '● ON SHIFT'], PAID: ['c-ok', 'PAID'], CANCELLED: ['c-muted', 'CANCELLED'],
       COMPLETED: ['c-owed', 'COLLECT ' + L.fmtShort(sh.payDate).toUpperCase()], DUE_TODAY: ['c-warn', 'DUE TODAY'],
       OVERDUE: ['c-danger', `OVERDUE ${st.overdueDays} DAY${st.overdueDays === 1 ? '' : 'S'}`],
-      PARTIAL: [st.overdue ? 'c-danger' : 'c-info', 'PARTIAL · OWED ' + L.money(st.owed)],
+      PARTIAL: [st.overdue ? 'c-danger' : 'c-info', 'PARTIAL'],
       INVOICED: [st.overdue ? 'c-danger' : 'c-gold', 'INVOICED' + (st.inv && st.inv.dueDate ? ' · DUE ' + L.fmtShort(st.inv.dueDate).toUpperCase() : '')] };
     const [c, t] = m[st.code] || ['c-muted', st.code];
     return `<span class="pill ${c}">${esc(t)}</span>`;
@@ -1260,7 +1348,7 @@ main { gap: 16px; padding-block: 18px 128px; }
   };
   const payTimeline = () => {
     const list = upcomingPay(30); if (!list.length) return '';
-    return `<section class="card flat"><div class="label c-gold">Coming in · next 30 days</div><div class="timeline">${list.map(x => `<div class="tl"><div class="tl-d"><b class="num">${esc(x.date === today() ? 'Today' : L.fmtShort(x.date))}</b>${x.overdue ? '<span class="pill c-danger">OVERDUE</span>' : ''}</div><div class="tl-b"><span>${esc(x.con)} · ${x.n} shift${x.n > 1 ? 's' : ''}</span><b class="num c-gold">${L.money(x.amt)}</b></div></div>`).join('')}</div></section>`;
+    return `<section class="card flat"><div class="label c-gold">Coming in · next 30 days</div><div class="timeline">${list.map(x => `<div class="tl"><div class="tl-d"><b class="num">${esc(x.date === today() ? 'Today' : L.fmtShort(x.date))}</b>${x.overdue ? '<span class="pill c-danger">OVERDUE</span>' : ''}</div><div class="tl-b"><span class="tl-c"><span>${esc(x.con)}</span><small class="muted">${x.n} shift${x.n > 1 ? 's' : ''}</small></span><b class="num c-gold">${L.money(x.amt)}</b></div></div>`).join('')}</div></section>`;
   };
   const recentTemplates = () => {
     const seen = new Set(); const out = [];
@@ -1345,27 +1433,30 @@ main { gap: 16px; padding-block: 18px 128px; }
     const actualNote = (sh.actualStart || sh.actualEnd) ? `<div class="small muted">Rostered ${t(sh.start)}-${t(sh.end)} · worked ${t(sh.actualStart || sh.start)}-${t(sh.actualEnd || sh.end)}</div>` : '';
     const phone = sh.supervisorPhone || (con && con.phone) || '';
     const paidAll = st.code === 'PAID';
-    return `<article class="shift ${clash ? 'is-danger' : (rest || st.overdue) ? 'is-warn' : ''}" style="--c:${esc((con && con.colour) || '#D4AF37')}">
-      <div class="head"><div class="grow">
-        <div class="row" style="gap:6px"><span class="tag num">${esc(L.fmtDate(sh.date))}</span>${rateTag ? `<span class="tag">${rateTag}</span>` : ''}${sh.method ? `<span class="tag" style="color:var(--muted)">${esc(sh.method)}</span>` : ''}</div>
-        <div class="site">${esc(sh.siteName || 'Site not set')}</div>
-        <div class="meta"><span>${esc(conName(sh))}</span>${sh.supervisorName ? `<span>${esc(sh.supervisorName)}</span>` : ''}${phone ? `<span class="num">${esc(phone)}</span>` : ''}</div>
-      </div>${statusPill(st, sh)}</div>
-      <div class="row" style="justify-content:space-between">
-        <div class="meta num"><span>${esc(t(sh.start))}-${esc(t(sh.end))}${sp && sp.overnight ? ' (+1)' : ''}</span><span>${L.fmtHours(min)}</span><span>${rate.type === 'FLAT' ? 'flat' : L.money(rate.cents) + '/h'}</span></div>
-        <div class="money">${L.money(st.total)}</div></div>
-      ${actualNote}
-      ${st.paid > 0 && !sh.cancelled ? `<div><div class="bar"><span style="width:${pct}%"></span></div><div class="row small muted" style="justify-content:space-between;margin-top:4px"><span>Paid ${L.money(st.paid)} (${pct}%)</span><span>${st.owed ? 'Still owed ' + L.money(st.owed) : 'Fully paid'}</span></div></div>` : ''}
+    const open = ui.open.has(sh.id); const d = L.parseYMD(sh.date);
+    return `<article class="shift ${clash ? 'is-danger' : (rest || st.overdue) ? 'is-warn' : ''} ${open ? 'open' : ''} ${sh.cancelled ? 'is-cancel' : ''}" data-act="toggleCard" data-id="${sh.id}" style="--c:${esc((con && con.colour) || '#D4AF37')}">
+      <div class="sc-top">
+        <div class="sc-date"><i>${L.DAYS[d.getDay()]}</i><b class="num">${d.getDate()}</b><span>${L.MONTHS[d.getMonth()]}</span></div>
+        <div class="sc-main"><div class="site">${esc(sh.siteName || 'Site not set')}</div>
+          <div class="meta num">${esc(t(sh.start))}–${esc(t(sh.end))}${sp && sp.overnight ? ' (+1)' : ''} · ${L.fmtHours(min)}</div>
+          <div class="meta">${esc(conName(sh))}${rateTag ? ` · <span class="rt">${rateTag}</span>` : ''}</div></div>
+        <div class="sc-right"><div class="money">${L.money(st.total)}</div>${statusPill(st, sh)}</div>
+      </div>
+      ${st.paid > 0 && !sh.cancelled ? `<div><div class="bar"><span style="width:${pct}%"></span></div><div class="row tiny muted" style="justify-content:space-between;margin-top:4px"><span>Paid ${L.money(st.paid)}</span><span>${st.owed ? 'Owed ' + L.money(st.owed) : 'Fully paid'}</span></div></div>` : ''}
       ${clash ? `<div class="warnbox danger"><b>Clash:</b> overlaps ${esc(other(clash.other))}.</div>` : ''}
-      ${!clash && rest ? `<div class="warnbox warn"><b>Short rest:</b> only ${rest.gapH.toFixed(1)} h ${rest.after ? 'after' : 'before'} ${esc(other(rest.other))}. Your guideline is ${S.settings.restHours} h.</div>` : ''}
-      ${long ? `<div class="warnbox warn">Long shift: ${long.hours.toFixed(1)} h (guideline ${S.settings.longHours} h).</div>` : ''}
-      ${sh.notes ? `<div class="small muted">Note: ${esc(sh.notes)}</div>` : ''}
-      <div class="acts">
+      ${!clash && rest ? `<div class="warnbox warn"><b>Short rest:</b> only ${rest.gapH.toFixed(1)} h ${rest.after ? 'after' : 'before'} ${esc(other(rest.other))}.</div>` : ''}
+      ${long ? `<div class="warnbox warn">Long shift: ${long.hours.toFixed(1)} h.</div>` : ''}
+      ${open ? `<div class="sc-more">
+        <div class="kv">${sh.supervisorName || phone ? `<span>Supervisor</span><b>${esc(sh.supervisorName || '')} <span class="num">${esc(phone)}</span></b>` : ''}
+          <span>Rate</span><b class="num">${rate.type === 'FLAT' ? 'Flat ' + L.money(st.total) : L.money(rate.cents) + '/h'}${rateTag ? ' · ' + rateTag.toLowerCase() : ''}</b>
+          ${sh.payDate ? `<span>Pay day</span><b>${esc(L.fmtDate(sh.payDate))}</b>` : ''}${sh.method ? `<span>Paid by</span><b>${esc(sh.method)}</b>` : ''}
+          ${sh.actualStart || sh.actualEnd ? `<span>Worked</span><b class="num">${t(sh.actualStart || sh.start)}–${t(sh.actualEnd || sh.end)}</b>` : ''}${sh.notes ? `<span>Note</span><b>${esc(sh.notes)}</b>` : ''}</div>
+        <div class="acts">
         ${sh.cancelled ? '' : `<button class="btn sm" data-act="payShift" data-id="${sh.id}">Log payment</button>
-        <button class="btn sm ${paidAll ? '' : 'outline'}" data-act="togglePaid" data-id="${sh.id}">${paidAll ? 'Undo paid' : 'Mark paid'}</button>`}
+        <button class="btn sm ${paidAll ? '' : 'gold'}" data-act="togglePaid" data-id="${sh.id}">${paidAll ? 'Undo paid' : 'Mark paid'}</button>`}
         ${phone ? `<a class="btn sm" href="https://wa.me/${L.waNumber(phone)}?text=${encodeURIComponent(waMsg(sh))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
         <button class="btn sm ghost" data-act="shiftMenu" data-id="${sh.id}" aria-label="More actions">More…</button>
-      </div></article>`;
+      </div></div>` : ''}</article>`;
   };
   const waMsg = sh => {
     const { st, min } = info(sh); const p = S.profile; const con = conOf(sh.contractorId);
@@ -1381,7 +1472,10 @@ main { gap: 16px; padding-block: 18px 128px; }
     const now = new Date();
     const cands = S.shifts.filter(s => !s.cancelled && !s.actualEnd).map(s => ({ s, sp: L.shiftSpan(s, true) }))
       .filter(x => x.sp && (x.sp.end > now || x.s.actualStart)).sort((a, b) => (b.s.actualStart ? 1 : 0) - (a.s.actualStart ? 1 : 0) || a.sp.start - b.sp.start);
-    if (!cands.length) return `<section class="card gold hero"><div class="label c-gold">Next shift</div><h3>No upcoming shifts</h3><p class="muted small" style="margin:4px 0 12px">Paste a WhatsApp shift message, or add one yourself.</p><button class="btn gold block" data-act="go" data-tab="scan">Add a shift</button></section>`;
+    if (!cands.length) return S.shifts.length ? `<section class="card gold hero"><div class="label c-gold">Next shift</div><h3>No upcoming shifts</h3><p class="muted small" style="margin:4px 0 12px">Got a new shift in WhatsApp? Add it in seconds.</p><button class="btn gold block" data-act="go" data-tab="scan">Add a shift</button></section>`
+      : `<section class="card gold hero first"><div class="label c-gold">Welcome</div><h3>Let's add your first shift</h3>
+        <ol class="steps"><li><b>Copy</b> a shift message in WhatsApp (long-press, Copy)</li><li>Tap the gold <b>+</b> below</li><li>Tap <b>Paste &amp; read</b>, check it, save</li></ol>
+        <button class="btn gold block" data-act="go" data-tab="scan">Add my first shift</button><div class="arrow-down" aria-hidden="true">↓</div></section>`;
     const { s, sp } = cands[0]; const con = conOf(s.contractorId); const phone = s.supervisorPhone || (con && con.phone) || '';
     const working = !!s.actualStart && !s.actualEnd; const diff = sp.start - now; const canStart = !working && diff <= 3 * 3600000;
     const h = Math.floor(Math.abs(diff) / 3600000), m = Math.floor(Math.abs(diff) % 3600000 / 60000);
@@ -1391,7 +1485,8 @@ main { gap: 16px; padding-block: 18px 128px; }
       <div class="row" style="justify-content:space-between"><span class="label c-gold">${working ? 'Current shift' : 'Next shift'}</span><span class="pill ${working ? 'c-ok' : diff <= 0 ? 'c-warn' : 'c-info'}">${working ? '● ' : ''}${esc(when)}</span></div>
       <h3>${esc(L.fmtDate(s.date))} · ${esc(conName(s))}</h3>
       <div class="muted">${esc(s.siteName || '')}</div>
-      <div class="when num">${esc(t(s.start))}-${esc(t(s.end))}${sp.overnight ? ' (+1)' : ''} · ${L.fmtHours(L.netMinutes(s))} · ${L.money(info(s).st.total)}</div>
+      <div class="when num">${esc(t(s.start))}-${esc(t(s.end))}${sp.overnight ? ' <small>(+1)</small>' : ''}</div><div class="when-sub num">${L.fmtHours(L.netMinutes(s))} · <b>${L.money(info(s).st.total)}</b></div>
+      ${working ? `<button class="btn sm ghost night-btn" data-act="toggleNight">${document.body.classList.contains('night') ? '☀ Brighten screen' : '☾ Dim screen for night post'}</button>` : ''}
       ${le ? `<div class="live"><div><span class="label">Earned so far</span><b class="num">${le.flat ? 'Flat rate' : L.money(le.cents)}</b></div><div><span class="label">Time on shift</span><b class="num">${Math.floor(le.mins / 60)}h ${L.pad(le.mins % 60)}m</b></div><div><span class="label">Started</span><b class="num">${esc(t(s.actualStart))}</b></div></div>` : ''}
       ${phone ? `<div class="small muted num" style="margin-top:6px">Supervisor: ${esc(s.supervisorName || '')} ${esc(phone)} <button class="btn sm ghost" data-act="copy" data-text="${esc(phone)}">Copy</button></div>` : ''}
       <div class="acts">
@@ -1496,12 +1591,21 @@ main { gap: 16px; padding-block: 18px 128px; }
     return html;
   };
   const quick = () => `<div class="quick">
-      <button data-act="go" data-tab="scan"><i>${ICON.scan}</i><span>Add shift</span></button>
+      <button data-act="go" data-tab="scan" class="primary"><i>${ICON.scan}</i><span>Add shift</span></button>
       <button data-act="lump"><i>${ICON.pay}</i><span>Got paid</span></button>
       <button data-act="newInvoice"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h4"/></svg></i><span>Invoice</span></button>
       <button data-act="sharePack"><i>${ICON.docs}</i><span>Send docs</span></button></div>`;
-  const viewHome = () => `${greeting()}${nextShiftHero()}${quick()}${alerts()}${kpis()}${insights()}${charts()}
-    <div class="sec-title"><h2>Shifts</h2><span class="small muted">${S.shifts.length} saved</span></div>
+  const comingUp = () => {
+    const now = new Date(); const lim = L.addDays(today(), 7);
+    const list = S.shifts.filter(s => !s.cancelled && s.date <= lim && !s.actualEnd).map(s => ({ s, sp: L.shiftSpan(s, true) })).filter(x => x.sp && x.sp.end > now).sort((a, b) => a.sp.start - b.sp.start).slice(1, 7);
+    if (!list.length) return '';
+    return `<div class="sec-title"><h2>Coming up</h2><span class="small muted">next 7 days</span></div><div class="uplist card flat">${list.map(({ s }) => { const d = L.parseYMD(s.date);
+      return `<button class="up-row" data-act="editShift" data-id="${s.id}" style="--c:${esc((conOf(s.contractorId) || {}).colour || '#D4AF37')}"><span class="up-d"><i>${L.DAYS[d.getDay()]}</i><b class="num">${d.getDate()}</b></span><span class="up-m"><b>${esc(s.siteName || 'Shift')}</b><span class="num">${esc(t(s.start))}–${esc(t(s.end))} · ${esc(conName(s))}</span></span><b class="num up-p">${L.money(info(s).st.total)}</b></button>`; }).join('')}</div>`;
+  };
+  const moneyStrip = () => `<div class="sec-title"><h2>Money</h2></div>${kpis()}<div class="money-stack">${insights()}${charts()}</div>`;
+  const viewHome = () => `${greeting()}${nextShiftHero()}${quick()}${alerts()}${comingUp()}${moneyStrip()}
+    <div class="sec-title"><h2>All shifts</h2><span class="small muted">${S.shifts.length} saved</span></div>
+    ${S.shifts.length ? '<p class="tiny faint" style="margin:-6px 2px 0">Tap a shift for details · swipe right to mark paid · swipe left for options</p>' : ''}
     <input class="search" id="searchBox" type="search" placeholder="Search site, contractor, notes" value="${esc(ui.q)}" aria-label="Search shifts">
     <div class="filters" role="tablist">${FILTERS.map(([k, l]) => `<button class="chip ${ui.filter === k ? 'on' : ''}" data-act="filter" data-v="${k}">${l}</button>`).join('')}</div>
     <div id="shiftList" style="display:flex;flex-direction:column;gap:10px">${shiftList()}</div>`;
@@ -1930,7 +2034,7 @@ main { gap: 16px; padding-block: 18px 128px; }
       ${list.length ? list.map(l => { const st = docStatus(l); const files = docFiles(l); const on = ui.docSel.has(l.id);
         return `<section class="card flat doc" style="border-color:${on ? 'var(--gold)' : st.col}">
           <div class="row" style="justify-content:space-between;flex-wrap:nowrap">
-            <label class="row" style="gap:8px;flex-wrap:nowrap;min-width:0;cursor:pointer"><input type="checkbox" class="pick" data-doc-pick="${l.id}" ${on ? 'checked' : ''} ${files.length ? '' : 'disabled'} aria-label="Select ${esc(l.title)}"><span class="label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.category)}</span></label>
+            <label class="row" style="gap:8px;flex-wrap:nowrap;min-width:0;cursor:pointer"><input type="checkbox" class="pick" data-doc-pick="${l.id}" ${on ? 'checked' : ''} ${files.length ? '' : 'disabled'} aria-label="Select ${esc(l.title)}"><span class="label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.category.replace(/ licence$/i,''))}</span></label>
             <div class="row" style="gap:6px;flex-wrap:nowrap"><span class="pill ${st.cls}">${st.txt}</span><button class="star ${l.inPack ? 'on' : ''}" data-act="docStar" data-id="${l.id}" aria-label="${l.inPack ? 'Remove from' : 'Add to'} my pack" title="My pack">★</button></div></div>
           <b style="font-size:16px">${esc(l.title)}</b>
           ${l.number || l.issuer ? `<div class="small muted">${l.number ? `No. <span class="num">${esc(l.number)}</span>` : ''}${l.number && l.issuer ? ' · ' : ''}${esc(l.issuer || '')}</div>` : ''}
@@ -2237,7 +2341,8 @@ main { gap: 16px; padding-block: 18px 128px; }
           <div class="grid3"><label class="field"><span>Rest between shifts (h)</span><input type="number" id="st_rest" min="0" step="0.5" value="${st.restHours}"></label><label class="field"><span>Long shift over (h)</span><input type="number" id="st_long" min="1" value="${st.longHours}"></label><label class="field"><span>Busy week over (h)</span><input type="number" id="st_week" min="1" value="${st.weekHours}"></label></div>
           <p class="tiny faint" style="margin:-4px 0 0">These are your own guidelines, not legal limits. They warn, they never block.</p>
           <div class="grid2"><label class="field"><span>Weekly earnings goal $</span><input type="number" id="st_goal" min="0" step="50" value="${st.weeklyGoal}"></label>
-            <label class="field"><span>Vibrate on actions</span><select id="st_hap"><option value="1" ${st.haptics ? 'selected' : ''}>On</option><option value="0" ${!st.haptics ? 'selected' : ''}>Off</option></select></label></div>
+            <label class="field"><span>Dim screen at night</span><select id="st_night"><option value="auto" ${st.nightMode === 'auto' ? 'selected' : ''}>While on shift</option><option value="on" ${st.nightMode === 'on' ? 'selected' : ''}>Always</option><option value="off" ${st.nightMode === 'off' ? 'selected' : ''}>Never</option></select></label></div>
+          <div class="grid2"><label class="field"><span>Vibrate on actions</span><select id="st_hap"><option value="1" ${st.haptics ? 'selected' : ''}>On</option><option value="0" ${!st.haptics ? 'selected' : ''}>Off</option></select></label><span></span></div>
           <div class="grid2"><label class="field"><span>Calendar alert before shift</span><select id="st_rem">${[[30, '30 min'], [60, '1 hour'], [120, '2 hours'], [180, '3 hours']].map(([v, l]) => `<option value="${v}" ${st.remindMin == v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
             <label class="field"><span>Clock</span><select id="st_clock"><option value="24" ${st.clock24 ? 'selected' : ''}>24-hour (18:00)</option><option value="12" ${!st.clock24 ? 'selected' : ''}>12-hour (6:00 pm)</option></select></label></div>
           <div class="switch"><div><b>Pop-up alerts while the app is open</b><div class="small muted">For alerts when the app is closed, use the calendar file on the Calendar tab.</div></div><input type="checkbox" id="st_notify" ${st.notifyOpen ? 'checked' : ''} aria-label="Pop-up alerts"></div>
@@ -2373,8 +2478,13 @@ main { gap: 16px; padding-block: 18px 128px; }
   };
 
   // ================= RENDER =================
+  const applyNight = () => {
+    const working = S.shifts.some(s => !s.cancelled && s.actualStart && !s.actualEnd); const m = S.settings.nightMode || 'auto';
+    const on = ui.night != null ? ui.night : (m === 'on' || (m === 'auto' && working));
+    document.body.classList.toggle('night', on);
+  };
   const render = () => {
-    recomputeConflicts();
+    recomputeConflicts(); applyNight();
     const v = $('#view');
     v.innerHTML = ui.tab === 'home' ? viewHome() : ui.tab === 'scan' ? viewScan() : ui.tab === 'calendar' ? viewCalendar() : ui.tab === 'pay' ? viewPay() : ui.tab === 'docs' ? viewDocs() : viewMore();
     document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === ui.tab));
@@ -2474,6 +2584,9 @@ main { gap: 16px; padding-block: 18px 128px; }
     viewInvoice: el => invoiceView(el.dataset.id),
     ivSharePdf: async el => { el.disabled = true; const inv = S.invoices.find(i => i.id === el.dataset.id); try { await shareOrSave(await invoicePdf(inv), `${inv.number} · ${L.money(inv.totals.due)} due`); } catch (e) { toast('Could not make the PDF. Use Copy text instead.'); } el.disabled = false; },
     ivDlPdf: async el => { const inv = S.invoices.find(i => i.id === el.dataset.id); try { const f = await invoicePdf(inv); saveFile(f.name, f.type, f); } catch (e) { toast('Could not make the PDF.'); } },
+    toggleCard: el => { const id = el.dataset.id; ui.open.has(id) ? ui.open.delete(id) : ui.open.add(id); const fresh = S.shifts.find(s => s.id === id); if (!fresh) return;
+      const tmp = document.createElement('div'); tmp.innerHTML = shiftCard(fresh).trim(); el.replaceWith(tmp.firstElementChild); },
+    toggleNight: () => { ui.night = !document.body.classList.contains('night'); render(); },
     pasteClip: async () => { try { const txt = await navigator.clipboard.readText(); if (!txt || !txt.trim()) { toast('Nothing copied yet. Copy the WhatsApp message first.'); return; } ui.raw = txt; render(); doParse(); } catch (e) { toast('Paste was blocked. Long-press the box and tap Paste.'); const r = $('#rawIn'); if (r) r.focus(); } },
     repeatRecent: el => { const s0 = S.shifts.find(x => x.id === el.dataset.id); if (!s0) return; let d = today(); const want = L.dow(s0.date); let k = 0; while (L.dow(d) !== want && k++ < 7) d = L.addDays(d, 1);
       shiftForm(null, { contractorId: s0.contractorId, supervisorName: s0.supervisorName, supervisorPhone: s0.supervisorPhone, siteName: s0.siteName, date: d, start: s0.start, end: s0.end, breakMin: s0.breakMin, rateType: s0.rateType, rateCents: s0.rateCents, flatCents: s0.flatCents, method: s0.method, notes: s0.notes }); },
@@ -2481,7 +2594,7 @@ main { gap: 16px; padding-block: 18px 128px; }
     ivDel: el => { const id = el.dataset.id; closeModal(); withUndo('Invoice deleted', () => { S.invoices = S.invoices.filter(i => i.id !== id); S.shifts.forEach(s => { if (s.invoiceId === id) s.invoiceId = null; }); }); },
     saveProfile: () => { const g = k => $('#' + k).value.trim(); Object.assign(S.profile, { fullName: g('pf_name'), tradingName: g('pf_trade'), licenceNo: g('pf_lic'), email: g('pf_email'), phone: g('pf_phone'), bankName: g('pf_bank'), accountName: g('pf_accn'), bsb: g('pf_bsb'), accountNumber: g('pf_acc') }); save(); render(); toast('Details saved'); },
     saveSettings: () => { const st = S.settings; st.restHours = Math.max(0, parseFloat($('#st_rest').value) || 8); st.longHours = Math.max(1, parseFloat($('#st_long').value) || 12); st.weekHours = Math.max(1, parseFloat($('#st_week').value) || 50);
-      st.weeklyGoal = Math.max(0, parseFloat($('#st_goal').value) || 0); st.haptics = $('#st_hap').value === '1';
+      st.weeklyGoal = Math.max(0, parseFloat($('#st_goal').value) || 0); st.haptics = $('#st_hap').value === '1'; st.nightMode = $('#st_night').value; ui.night = null;
       st.remindMin = +$('#st_rem').value; st.clock24 = $('#st_clock').value === '24'; st.includeBank = $('#st_bank').checked;
       const wantN = $('#st_notify').checked;
       if (wantN && typeof Notification !== 'undefined' && Notification.permission !== 'granted') { try { Notification.requestPermission().then(p => { st.notifyOpen = p === 'granted'; save(); if (p !== 'granted') toast('Notifications were not allowed.'); }); } catch (e) { st.notifyOpen = false; } }
@@ -2508,9 +2621,21 @@ main { gap: 16px; padding-block: 18px 128px; }
   };
   document.addEventListener('click', e => {
     const pin = e.target.closest('[data-pin]'); if (pin) { pinKey(pin.dataset.pin); return; }
+    if (Date.now() - swipeAt < 450) { e.preventDefault(); return; }
     const el = e.target.closest('[data-act]'); if (!el) return;
+    if (el.dataset.act === 'toggleCard' && e.target.closest('a,input,select,label,textarea')) return;
     const fn = A[el.dataset.act]; if (fn) { if (el.dataset.act !== 'modalBack') e.preventDefault(); fn(el, e); }
   });
+  // swipe a shift card: right = mark paid, left = options
+  let sw = null, swipeAt = 0;
+  document.addEventListener('pointerdown', e => { const c = e.target.closest && e.target.closest('.shift'); if (!c || e.target.closest('button,a,input,select,textarea') || e.button > 0) return; sw = { c, x: e.clientX, y: e.clientY, dx: 0, lock: null }; });
+  document.addEventListener('pointermove', e => { if (!sw) return; const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+    if (sw.lock === null && (Math.abs(dx) > 12 || Math.abs(dy) > 12)) sw.lock = Math.abs(dx) > Math.abs(dy) * 1.3 ? 'x' : 'y';
+    if (sw.lock !== 'x') return; sw.dx = dx; sw.c.style.transform = `translateX(${Math.max(-110, Math.min(110, dx))}px)`; sw.c.classList.toggle('sw-r', dx > 80); sw.c.classList.toggle('sw-l', dx < -80); });
+  const swEnd = cancel => { if (!sw) return; const { c, dx, lock } = sw; sw = null; c.style.transform = ''; c.classList.remove('sw-r', 'sw-l');
+    if (lock === 'x' && !cancel) { swipeAt = Date.now(); const id = c.dataset.id; const s0 = S.shifts.find(s => s.id === id); if (!s0) return;
+      if (dx > 80) { if (s0.cancelled) toast('This shift is cancelled.'); else { buzz(25); togglePaid(id); } } else if (dx < -80) A.shiftMenu({ dataset: { id } }); } };
+  document.addEventListener('pointerup', () => swEnd(false)); document.addEventListener('pointercancel', () => swEnd(true));
   document.addEventListener('input', e => {
     const el = e.target;
     if (el.id === 'searchBox') { ui.q = el.value; const l = $('#shiftList'); if (l) { recomputeConflicts(); l.innerHTML = shiftList(); } return; }
