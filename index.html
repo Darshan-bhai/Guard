@@ -474,6 +474,25 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
 .money-stack { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .money-stack > * { width: 100%; min-width: 0; margin: 0; }
 .money-stack svg { max-width: 100%; height: auto; }
+/* ===== pay periods ===== */
+.seg.seg3 { display: grid; grid-template-columns: repeat(3, 1fr); align-self: stretch; }
+.seg.seg3 button { padding-inline: 6px; white-space: nowrap; }
+.period { display: flex; flex-direction: column; gap: 10px; border-left: 3px solid var(--cc, #E9C46A); }
+.period.p-late { border-color: #F87171; box-shadow: 0 0 0 1px rgba(248,113,113,.25) inset; }
+.period.p-paid { opacity: .78; }
+.pp-head { display: flex; gap: 10px; align-items: flex-start; }
+.pp-con { font-size: 16px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-range { font-size: 13px; color: var(--muted, #9aa3b5); margin-top: 2px; }
+.pp-mid { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.pp-amt { font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+.pp-pay { text-align: right; }
+.pp-pay b { font-size: 16px; }
+.pp-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.pp-btns { gap: 8px; flex-wrap: wrap; }
+.pp-list { border-top: 1px solid rgba(255,255,255,.06); padding-top: 6px; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--gold, #E9C46A); font: inherit; text-decoration: underline; cursor: pointer; }
+.cal button.payday { position: relative; }
+.cal button.payday::after { content: "$"; position: absolute; top: 1px; right: 4px; font: 700 10px var(--f-mono, monospace); color: var(--gold, #E9C46A); }
 </style></head><body>
 <div id="app">
   <header class="top"><div class="wrap">
@@ -630,17 +649,34 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
 
   // ---------- pay date rules ----------
   // rule: {type: WEEKLY_DAY|DAYS_AFTER_SHIFT|FORTNIGHTLY|END_OF_MONTH|ON_THE_NIGHT, value, anchor}
-  L.payDateFrom = (endYmd, rule) => {
+  // Period-based cycles (WEEKLY / FORTNIGHTLY): every shift worked inside one period shares ONE pay date.
+  // rule: {type, periodStart:'YYYY-MM-DD' (first day of any known period), payAfter: days after the period's last day}
+  L.REF_MONDAY = '2026-01-05';
+  L.cycleLen = rule => rule && rule.type === 'FORTNIGHTLY' ? 14 : rule && rule.type === 'WEEKLY' ? 7 : 0;
+  L.normRule = rule => {
+    if (!rule || !rule.type) return rule || null;
+    if ((rule.type === 'FORTNIGHTLY' || rule.type === 'WEEKLY') && !rule.periodStart) {
+      const r = Object.assign({}, rule); const len = L.cycleLen(rule); r.payAfter = r.payAfter == null ? 4 : Number(r.payAfter);
+      // old style: rule.anchor was a known PAY date -> work back to the period it paid for
+      r.periodStart = rule.anchor ? L.addDays(rule.anchor, -(r.payAfter + len - 1)) : L.REF_MONDAY;
+      return r;
+    }
+    return rule;
+  };
+  L.periodOf = (workYmd, rule) => {
+    rule = L.normRule(rule); const len = L.cycleLen(rule); if (!len || !workYmd) return null;
+    const k = Math.floor(L.daysBetween(rule.periodStart, workYmd) / len);
+    const start = L.addDays(rule.periodStart, k * len), end = L.addDays(start, len - 1);
+    const pa = Number(rule.payAfter); return { start, end, pay: L.addDays(end, isNaN(pa) ? 4 : pa), len };
+  };
+  // workYmd = the day the shift starts (falls back to end date)
+  L.payDateFrom = (endYmd, rule, workYmd) => {
     if (!rule || !endYmd) return null;
     const v = Number(rule.value);
     switch (rule.type) {
+      case 'WEEKLY': case 'FORTNIGHTLY': { const p = L.periodOf(workYmd || endYmd, rule); let d = p.pay; if (d < endYmd) d = endYmd; return d; }
       case 'WEEKLY_DAY': { const d = L.dow(endYmd); let add = (v - d + 7) % 7; if (add === 0) add = 7; return L.addDays(endYmd, add); }
       case 'DAYS_AFTER_SHIFT': return L.addDays(endYmd, isNaN(v) ? 7 : v);
-      case 'FORTNIGHTLY': {
-        if (!rule.anchor) return L.addDays(endYmd, 14);
-        let k = Math.ceil((L.daysBetween(rule.anchor, endYmd) + 1) / 14); if (k < 0) k = 0;
-        let d = L.addDays(rule.anchor, k * 14); if (d <= endYmd) d = L.addDays(d, 14); return d;
-      }
       case 'END_OF_MONTH': {
         const e = L.parseYMD(endYmd); let last = new Date(e.getFullYear(), e.getMonth() + 1, 0);
         if (L.ymd(last) === endYmd) last = new Date(e.getFullYear(), e.getMonth() + 2, 0);
@@ -650,14 +686,29 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
       default: return null;
     }
   };
-  L.PAY_RULE_LABEL = { WEEKLY_DAY: 'Weekly on a day', DAYS_AFTER_SHIFT: 'Days after shift', FORTNIGHTLY: 'Fortnightly',
-    END_OF_MONTH: 'End of month', ON_THE_NIGHT: 'On the night (cash)' };
+  L.payDateForShift = (sh, rule) => sh && sh.date ? L.payDateFrom(L.endDate(sh), rule, sh.date) : null;
+  L.PAY_RULE_LABEL = { FORTNIGHTLY: 'Fortnightly', WEEKLY: 'Weekly', WEEKLY_DAY: 'Next weekday',
+    DAYS_AFTER_SHIFT: 'Days after shift', END_OF_MONTH: 'End of month', ON_THE_NIGHT: 'Cash on the night' };
+  const WDN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   L.describeRule = r => {
     if (!r) return 'Not set';
-    if (r.type === 'WEEKLY_DAY') return 'Every ' + ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(r.value)];
-    if (r.type === 'DAYS_AFTER_SHIFT') return `${r.value} days after shift`;
-    if (r.type === 'FORTNIGHTLY') return 'Fortnightly' + (r.anchor ? ' from ' + L.fmtShort(r.anchor) : '');
+    if (r.type === 'FORTNIGHTLY' || r.type === 'WEEKLY') { const n = L.normRule(r); const pa = Number(n.payAfter);
+      return `${r.type === 'FORTNIGHTLY' ? 'Fortnightly' : 'Weekly'}, ${WDN[L.dow(n.periodStart)].slice(0, 3)}–${WDN[(L.dow(n.periodStart) + 6) % 7].slice(0, 3)}, paid ${pa === 0 ? 'on the last day' : pa === 1 ? 'the next day' : WDN[(L.dow(n.periodStart) + 6 + pa) % 7] + ' after (' + pa + ' days)'}`; }
+    if (r.type === 'WEEKLY_DAY') return 'Every ' + WDN[Number(r.value)];
+    if (r.type === 'DAYS_AFTER_SHIFT') return `${r.value} days after each shift`;
     return L.PAY_RULE_LABEL[r.type] || r.type;
+  };
+  // Group owed/paid shifts into pay batches: one batch = one contractor + one pay date.
+  // shifts need {id, contractorId, date, payDate}; stat(s) -> {total, paid, owed, ended, cancelled?}
+  L.payBatches = (shifts, stat, ruleOf) => {
+    const m = {};
+    shifts.forEach(s => { if (s.cancelled || !s.payDate) return; const k = s.contractorId + '|' + s.payDate;
+      const b = m[k] || (m[k] = { key: k, contractorId: s.contractorId, payDate: s.payDate, shifts: [], total: 0, paid: 0, owed: 0, minutes: 0, notEnded: 0, from: s.date, to: s.date });
+      const st = stat(s); b.shifts.push(s); b.total += st.total; b.paid += Math.min(st.paid, st.total); b.owed += st.owed; b.minutes += st.minutes || 0;
+      if (!st.ended) b.notEnded++; if (s.date < b.from) b.from = s.date; if (s.date > b.to) b.to = s.date; });
+    return Object.values(m).map(b => { const rule = ruleOf ? ruleOf(b.contractorId) : null; const p = rule ? L.periodOf(b.from, rule) : null;
+      if (p && b.to <= p.end && b.payDate !== '0000-nopay') { b.periodStart = p.start; b.periodEnd = p.end; b.cycle = L.normRule(rule).type; }
+      b.shifts.sort((x, y) => x.date < y.date ? -1 : 1); return b; }).sort((a, b) => a.payDate < b.payDate ? -1 : a.payDate > b.payDate ? 1 : 0);
   };
 
   // ---------- clash & rest ----------
@@ -840,8 +891,13 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
   L.findRate = str => {
     let m;
     if ((m = /\$\s?(\d+(?:\.\d{1,2})?)\s*(?:flat|for the shift|total|all in)\b/i.exec(str))) return { flat: true, cents: Math.round(+m[1] * 100), match: m };
+    // "flat rate $280", "flat $280", "total $300", "$300 cash", "$280 for the night"
+    if ((m = /\b(?:flat(?:\s*rate)?|total|fixed|all\s*in)\s*(?:of|is|:|=)?\s*\$\s?(\d+(?:\.\d{1,2})?)/i.exec(str))) return { flat: true, cents: Math.round(+m[1] * 100), match: m };
+    if ((m = /\$\s?(\d{3,4}(?:\.\d{1,2})?)\s*(?:cash|for the (?:night|day|shift)|per (?:night|shift)|a night|a shift|\/\s*(?:night|shift))\b/i.exec(str))) return { flat: true, cents: Math.round(+m[1] * 100), match: m };
+    if ((m = /\$\s?(\d{2,3}(?:\.\d{1,2})?)\s*(?:per (?:night|shift)|a night|a shift|\/\s*(?:night|shift)|for the (?:night|shift))\b/i.exec(str))) return { flat: true, cents: Math.round(+m[1] * 100), match: m };
     if ((m = /\$?\s?(\d{2,3}(?:\.\d{1,2})?)\s*(?:\/\s*h(?:ou)?r?s?\b|\/h\b|p\/h\b|ph\b|phr\b|per\s*h(?:ou)?r|an?\s*h(?:ou)?r|\/\s*hour)/i.exec(str))) return { flat: false, cents: Math.round(+m[1] * 100), match: m };
-    if ((m = /\brate\s*(?:of|is|:|=)?\s*\$?\s?(\d{2,3}(?:\.\d{1,2})?)/i.exec(str))) return { flat: false, cents: Math.round(+m[1] * 100), match: m };
+    if ((m = /\brate\s*(?:of|is|:|=)?\s*\$?\s?(\d{2,3}(?:\.\d{1,2})?)/i.exec(str))) { const v = +m[1]; return v >= 120 ? { flat: true, cents: Math.round(v * 100), match: m, weak: true } : { flat: false, cents: Math.round(v * 100), match: m }; }
+    if ((m = /\$\s?(\d{3,4}(?:\.\d{1,2})?)\b/i.exec(str)) && +m[1] >= 120) return { flat: true, cents: Math.round(+m[1] * 100), match: m, weak: true };
     if ((m = /\$\s?(\d{2}(?:\.\d{1,2})?)\b(?!\s*(?:flat|total))/i.exec(str))) return { flat: false, cents: Math.round(+m[1] * 100), match: m, weak: true };
     return null;
   };
@@ -857,7 +913,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     let m;
     if (/\b(?:cash|paid|pay)\s*(?:on|at|in)?\s*(?:the\s*)?(?:night|end of shift|shift end|on the day)\b/i.test(str)) return { type: 'ON_THE_NIGHT' };
     if ((m = /\b(\d{1,2})\s*days?\s*(?:after|later|from)/i.exec(str))) return { type: 'DAYS_AFTER_SHIFT', value: +m[1] };
-    if (/\bfortnight(?:ly)?\b/i.test(str)) return { type: 'FORTNIGHTLY', value: null, anchor: null, check: true };
+    if (/\bfortnight(?:ly)?\b/i.test(str)) return { type: 'FORTNIGHTLY', value: null, periodStart: null, payAfter: 4, check: true };
     if ((m = /\bpa(?:y|id|yment|yday)\b[^\n.]{0,25}?\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*/i.exec(str))) return { type: 'WEEKLY_DAY', value: WD[m[1].toLowerCase()] };
     if (/\bend of (?:the )?month\b/i.test(str)) return { type: 'END_OF_MONTH' };
     if (/\b(?:paid|pay)\s*weekly\b/i.test(str)) return { type: 'DAYS_AFTER_SHIFT', value: 7, check: true };
@@ -887,16 +943,20 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     const low = block.toLowerCase();
     for (const k of (knownSites || [])) { const key = k.toLowerCase(); const last = key.split(' ').filter(w => w.length > 3).pop();
       if (low.includes(key) || (last && new RegExp('\\b' + last.replace(/[^a-z0-9]/g, '') + '\\b').test(low))) return { value: k, conf: 'HIGH', how: 'known' }; }
-    // leftover capitalised words
-    const words = block.replace(/[^A-Za-z'&\s-]/g, ' ').split(/\s+/).map(w => w.replace(/^[-']+|[-']+$/g, '')).filter(Boolean);
+    // leftover capitalised words ("Port of Brisbane", "Suncorp Stadium (Gate 5)")
+    const words = block.replace(/[^A-Za-z0-9'&\s-]/g, ' ').split(/\s+/).map(w => w.replace(/^[-']+|[-']+$/g, '')).filter(Boolean);
+    const JOIN = new Set(['of', 'the', 'on', 'and', '&', 'de', 'upon']); const NUMWORD = /^(gate|level|terminal|door|dock|entrance|entry|bay|zone|area|post|lot|wharf|pier|shed|building|block|tower|stage|carpark|car)$/i;
     let best = [], cur = [];
-    for (const w of words) {
-      const ok = w.length > 1 && !STOP.has(w.toLowerCase()) && /^[A-Za-z]/.test(w);
-      if (ok) cur.push(w); else { if (cur.length > best.length) best = cur; cur = []; }
+    const good = w => w && w.length > 1 && !STOP.has(w.toLowerCase()) && /^[A-Za-z]/.test(w);
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      const num = /^\d{1,3}[A-Za-z]?$/.test(w) && cur.length && NUMWORD.test(cur[cur.length - 1]);
+      const join = cur.length && JOIN.has(w.toLowerCase()) && good(words[i + 1]) && /^[A-Z]/.test(words[i + 1]);
+      if (good(w) || num || join) cur.push(join ? w.toLowerCase() : w); else { if (cur.length > best.length) best = cur; cur = []; }
     }
     if (cur.length > best.length) best = cur;
     if (best.length) {
-      const v = best.slice(0, 5).map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+      const v = best.slice(0, 6).map(w => /^(of|the|on|and|&|de|upon)$/.test(w) ? w : w[0].toUpperCase() + w.slice(1)).join(' ');
       return { value: v, conf: 'HIGH', how: 'words' };
     }
     return null;
@@ -945,7 +1005,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
       const fd = L.findDate(clean, today);
       const hasTime = !!L.findTimes(fd ? stripRanges(clean, [fd.match]) : clean);
       const strong = fd && fd.kind === 'strong';
-      const weak = fd && !strong && !/\bpa(?:y|id|yment|yday)\b/i.test(clean);
+      const weak = fd && !strong && !/\bpa(?:y|id|yment|yday)\b[^\n]{0,12}$/i.test(clean.slice(0, fd.match[0]));
       const hasDate = strong || (weak && (hasTime || /^\s*(?:\w+\s+){0,3}?(mon|tue|wed|thu|fri|sat|sun|today|tonight|tomorrow)/i.test(clean)));
       if (hasDate) blocks.push({ lines: [line], hasTime });
       else if (blocks.length && hasTime && !blocks[blocks.length - 1].hasTime) { blocks[blocks.length - 1].lines.push(line); blocks[blocks.length - 1].hasTime = true; }
@@ -994,8 +1054,10 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
       // pay date
       const tmpShift = { date: f.date.value, start: f.start.value, end: f.end.value || f.start.value };
       const endY = f.date.value && f.start.value && f.end.value ? L.endDate(tmpShift) : f.date.value;
-      if (payRule && endY) f.payDate = { value: L.payDateFrom(endY, payRule), conf: payRule.check ? 'CHECK' : 'HIGH', reason: payRule.check ? 'Pay cycle guessed from message' : '', rule: payRule };
-      else if (con && con.payRule && endY) f.payDate = { value: L.payDateFrom(endY, con.payRule), conf: 'CHECK', reason: 'From contractor rule' };
+      const sameAsCon = payRule && con && con.payRule && con.payRule.type === payRule.type;
+      if (sameAsCon && endY) f.payDate = { value: L.payDateFrom(endY, con.payRule, f.date.value), conf: 'HIGH', reason: '', rule: con.payRule };
+      else if (payRule && endY) f.payDate = { value: L.payDateFrom(endY, payRule, f.date.value), conf: payRule.check ? 'CHECK' : 'HIGH', reason: payRule.check ? (L.cycleLen(payRule) ? 'Fortnight guessed as Mon–Sun, paid the Thursday after. Set the real cycle on the contractor.' : 'Pay cycle guessed from message') : '', rule: payRule };
+      else if (con && con.payRule && endY) f.payDate = { value: L.payDateFrom(endY, con.payRule, f.date.value), conf: 'CHECK', reason: 'From contractor rule' };
       else if (endY) f.payDate = { value: L.addDays(endY, 7), conf: 'CHECK', reason: 'No pay day found, set 7 days after' };
       else f.payDate = { value: '', conf: 'MISSING', reason: 'Needs a date first' };
       results.push({ fields: f, rawText: blockText.trim() });
@@ -1011,7 +1073,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
           const g = JSON.parse(JSON.stringify(f)); g.date = { value: x.ymd, conf: x.conf, reason: x.reason };
           const ey = g.start.value && g.end.value ? L.endDate({ date: x.ymd, start: g.start.value, end: g.end.value }) : x.ymd;
           const rule = g.payDate.rule || (payRule) || (con && con.payRule);
-          g.payDate.value = rule ? L.payDateFrom(ey, rule) : L.addDays(ey, 7);
+          g.payDate.value = rule ? L.payDateFrom(ey, rule, x.ymd) : L.addDays(ey, 7);
           results.push({ fields: g, rawText: blockText.trim() });
         }
       }
@@ -1142,7 +1204,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
 
   // ================= UI STATE =================
   const ui = { tab: 'home', sub: null, filter: 'ALL', q: '', chart: 'con', calMonth: null, calSel: null, scanMode: 'text', raw: '', parsed: [],
-    open: new Set(), night: null, hint: '', ocr: null, payView: 'ledger', invDraft: null, undo: null };
+    open: new Set(), night: null, hint: '', ocr: null, payView: 'periods', invDraft: null, undo: null };
 
   // ================= HELPERS =================
   const today = () => L.ymd(new Date());
@@ -1230,7 +1292,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     const td = today(); const D = n => L.addDays(td, n);
     const A = { id: L.uid(), name: 'Demo Contractor A', contactName: 'Raj', phone: '0400 000 001', colour: COLOURS[0],
       rates: { weekday: 3500, night: 4200, saturday: 4500, sunday: 5000, publicHoliday: 7000 }, nightStart: '19:00', nightEnd: '06:00',
-      payRule: { type: 'WEEKLY_DAY', value: 4 }, defaultMethod: METHODS[0], knownSites: ['Westfield Chermside', 'Suncorp Stadium'], corrections: [], isDemo: true };
+      payRule: { type: 'FORTNIGHTLY', periodStart: L.mondayOf(D(-14)), payAfter: 4 }, defaultMethod: METHODS[0], knownSites: ['Westfield Chermside', 'Suncorp Stadium'], corrections: [], isDemo: true };
     const B = { id: L.uid(), name: 'Demo Contractor B', contactName: 'Mia', phone: '0400 000 002', colour: COLOURS[1],
       rates: { weekday: 3600, night: 4000, saturday: 4500, sunday: 4800, publicHoliday: 6800 }, nightStart: '19:00', nightEnd: '06:00',
       payRule: { type: 'DAYS_AFTER_SHIFT', value: 7 }, defaultMethod: 'Cash', knownSites: ['South Bank Forecourt'], corrections: [], isDemo: true };
@@ -1241,7 +1303,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
       const sh = Object.assign({ id: L.uid(), contractorId: con.id, contractorName: con.name, supervisorName: con.contactName, supervisorPhone: con.phone,
         siteName: site, date, start, end, actualStart: null, actualEnd: null, breakMin: 0, rateType: 'AUTO', rateCents: 0, flatCents: 0,
         method: con.defaultMethod, notes: '', cancelled: false, invoiceId: null, rawText: '', source: 'MANUAL', isDemo: true, createdAt: new Date().toISOString() }, extra);
-      sh.payDate = L.payDateFrom(L.endDate(sh), con.payRule); return sh;
+      sh.payDate = L.payDateForShift(sh, con.payRule); return sh;
     };
     const sh = [
       mk(A, D(-14), '18:00', '02:00', 'Westfield Chermside'), mk(A, D(-7), '18:00', '02:00', 'Westfield Chermside'),
@@ -1274,6 +1336,8 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     if (hasDemo()) out.push(`<div class="alert demo"><div class="grow"><b>Demo data is on.</b> <span class="muted small">These are made-up examples so you can try things.</span></div><button class="btn sm outline" data-act="askClearDemo">Clear</button></div>`);
     const overdue = S.shifts.filter(s => info(s).st.overdue);
     if (overdue.length) out.push(`<div class="alert danger"><div class="grow"><b>${L.money(sumOwed(overdue))} overdue</b> <span class="small muted">from ${overdue.length} shift${overdue.length > 1 ? 's' : ''}</span></div><button class="btn sm danger" data-act="filter" data-v="OVERDUE">View</button></div>`);
+    batches().filter(b => b.payDate === td && b.owed > 0).forEach(b => { const ready = b.shifts.filter(s => info(s).st.ended).reduce((x, s) => x + info(s).st.owed, 0);
+      out.push(`<div class="alert info"><div class="grow"><b>Pay day: ${L.money(b.owed)}</b> <span class="small muted">from ${esc((conOf(b.contractorId) || {}).name || 'contractor')} · ${esc(periodLabel(b))}</span></div>${ready ? `<button class="btn sm gold" data-act="batchPaid" data-k="${esc(b.key)}">Got paid</button>` : ''}</div>`); });
     const soon = S.shifts.filter(s => { if (s.cancelled) return false; const sp = L.shiftSpan(s, true); return sp && sp.start > now && (sp.start - now) <= 3 * 3600000; });
     soon.forEach(s => out.push(`<div class="alert info"><div class="grow"><b>Shift ${s.date === td ? 'today' : 'tomorrow'} at ${esc(t(s.start))}</b> <span class="small muted">${esc(s.siteName || '')} · ${esc(conName(s))}</span></div><button class="btn sm outline" data-act="editShift" data-id="${s.id}">Open</button></div>`));
     const lic = S.licences.filter(l => l.expiry && L.daysBetween(td, l.expiry) <= 30);
@@ -1383,7 +1447,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
       g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, H); g.fillStyle = '#0B1324'; g.fillRect(0, 0, W, 160); g.fillStyle = '#D4AF37'; g.fillRect(0, 160, W, 6);
       g.fillStyle = '#D4AF37'; g.font = 'bold 58px Georgia, "Times New Roman", serif'; g.textAlign = 'left'; g.fillText('INVOICE', M, 105);
       g.textAlign = 'right'; g.fillStyle = '#FFFFFF'; g.font = 'bold 32px "Courier New", monospace'; g.fillText(inv.number, W - M, 82);
-      g.font = '24px Arial, sans-serif'; g.fillStyle = '#C9D3E8'; g.fillText(`Issued ${L.fmtDate(inv.issueDate)}   ·   Due ${L.fmtDate(inv.dueDate)}`, W - M, 122); g.textAlign = 'left';
+      g.font = '24px Arial, sans-serif'; g.fillStyle = '#C9D3E8'; g.fillText(`Issued ${L.fmtDate(inv.issueDate)}   ·   Due ${L.fmtDate(inv.dueDate)}`, W - M, 122); if (inv.period) { g.font = '20px Arial, sans-serif'; g.fillStyle = '#D4AF37'; g.fillText(inv.period, W - M, 150); } g.textAlign = 'left';
       let y = 230;
       g.fillStyle = '#5F6878'; g.font = 'bold 20px Arial, sans-serif'; g.fillText('FROM', M, y); g.fillText('BILL TO', W / 2 + 30, y);
       g.fillStyle = '#0B1324'; g.font = 'bold 30px Arial, sans-serif'; g.fillText(trunc(g, p.tradingName || p.fullName || '', W / 2 - M - 10), M, y + 40); g.fillText(trunc(g, inv.contractorName || '', W / 2 - M - 30), W / 2 + 30, y + 40);
@@ -1452,8 +1516,8 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
           ${sh.payDate ? `<span>Pay day</span><b>${esc(L.fmtDate(sh.payDate))}</b>` : ''}${sh.method ? `<span>Paid by</span><b>${esc(sh.method)}</b>` : ''}
           ${sh.actualStart || sh.actualEnd ? `<span>Worked</span><b class="num">${t(sh.actualStart || sh.start)}–${t(sh.actualEnd || sh.end)}</b>` : ''}${sh.notes ? `<span>Note</span><b>${esc(sh.notes)}</b>` : ''}</div>
         <div class="acts">
-        ${sh.cancelled ? '' : `<button class="btn sm" data-act="payShift" data-id="${sh.id}">Log payment</button>
-        <button class="btn sm ${paidAll ? '' : 'gold'}" data-act="togglePaid" data-id="${sh.id}">${paidAll ? 'Undo paid' : 'Mark paid'}</button>`}
+        ${sh.cancelled ? '' : st.ended || st.paid ? `<button class="btn sm" data-act="payShift" data-id="${sh.id}">Log payment</button>
+        <button class="btn sm ${paidAll ? '' : 'gold'}" data-act="togglePaid" data-id="${sh.id}">${paidAll ? 'Undo paid' : 'Mark paid'}</button>` : ''}
         ${phone ? `<a class="btn sm" href="https://wa.me/${L.waNumber(phone)}?text=${encodeURIComponent(waMsg(sh))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
         <button class="btn sm ghost" data-act="shiftMenu" data-id="${sh.id}" aria-label="More actions">More…</button>
       </div></div>` : ''}</article>`;
@@ -1656,7 +1720,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
       html += `<section class="card review form" data-i="${i}">
         <div class="review-head"><b>Shift ${i + 1} of ${ui.parsed.length}</b><button class="btn sm ghost" data-act="dropParsed" data-i="${i}">Remove</button></div>
         ${conflictBanner(conf)}
-        ${dup ? `<div class="warnbox warn">Looks like you already saved this shift (${esc(L.fmtShort(dup.date))} ${esc(dup.start)}). Saving adds another copy.</div>` : ''}
+        ${dup ? `<div class="warnbox warn">${v.keepDup ? 'This is a copy of a shift you already saved. It will be saved again.' : `Already saved (${esc(L.fmtShort(dup.date))} ${esc(t(dup.start))}). It will be skipped. <button class="linkbtn" data-act="keepDup" data-i="${i}">Save a second copy</button>`}</div>` : ''}
         <label class="field ${fieldCls(f.contractor.conf)}"><span>Contractor</span><select data-k="contractorId">${conOptions(v.contractorId)}</select>${why(f.contractor)}</label>
         ${v.contractorId === '__new' ? `<label class="field"><span>New contractor name</span><input data-k="newCon" value="${esc(v.newCon || '')}" placeholder="Company name"></label>` : ''}
         <div class="grid2">
@@ -1719,17 +1783,18 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     if (ui.parsed.length) ra.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const saveParsed = () => {
-    let n = 0;
+    let n = 0, skipped = 0;
     for (const p of ui.parsed) {
       const v = p.edit;
       if (!v.date || !v.start || !v.end) { toast(`Shift ${ui.parsed.indexOf(p) + 1} needs a date, start and end.`); return; }
     }
     for (const p of ui.parsed) {
       const v = p.edit; let con = conOf(v.contractorId);
+      if (!v.keepDup && S.shifts.some(s => !s.cancelled && s.date === v.date && s.start === v.start && ((con && s.contractorId === con.id) || (v.siteName && s.siteName === v.siteName)))) { skipped++; continue; }
       if (v.contractorId === '__new' || (!con && v.newCon)) {
         con = newContractor({ name: v.newCon || 'New contractor', contactName: v.supervisorName, phone: v.supervisorPhone,
           rates: { weekday: v.rateType === 'CUSTOM' ? L.toCents(v.rate) : 0, night: 0, saturday: 0, sunday: 0, publicHoliday: 0 },
-          payRule: v.payRuleFromMsg && !v.payRuleFromMsg.check ? v.payRuleFromMsg : { type: 'DAYS_AFTER_SHIFT', value: 7 } });
+          payRule: v.payRuleFromMsg && (!v.payRuleFromMsg.check || L.cycleLen(v.payRuleFromMsg)) ? (({ check, ...r }) => L.normRule(r))(v.payRuleFromMsg) : { type: 'DAYS_AFTER_SHIFT', value: 7 } });
         S.contractors.push(con);
         ui.parsed.forEach(q => { if (q.edit.contractorId === '__new' && q.edit.newCon === v.newCon) q.edit.contractorId = con.id; });
       }
@@ -1745,8 +1810,8 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
         cancelled: false, invoiceId: null, rawText: p.rawText, source: ui.scanMode === 'photo' ? 'PHOTO' : 'TEXT', isDemo: false, createdAt: new Date().toISOString() });
       n++;
     }
-    ui.parsed = []; ui.raw = ''; ui._parsedOnce = false; ui.ocr = null; save(); ui.tab = 'home'; ui.filter = 'UPCOMING'; render();
-    toast(`Saved ${n} shift${n > 1 ? 's' : ''}`);
+    ui.parsed = []; ui.raw = ''; ui._parsedOnce = false; ui.ocr = null; save(); ui.tab = 'home'; ui.filter = n ? 'UPCOMING' : 'ALL'; render();
+    toast(n ? `Saved ${n} shift${n > 1 ? 's' : ''}${skipped ? ` · skipped ${skipped} already saved` : ''}` : `Nothing new: ${skipped > 1 ? 'those shifts are' : 'that shift is'} already saved`);
   };
 
   // OCR
@@ -1778,9 +1843,12 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
       const canvas = await prepImage(file);
       ui.ocr = { state: 'busy', pct: 3, msg: 'Loading the text reader…' }; paintOCR();
       await loadTesseract();
-      const r = await window.Tesseract.recognize(canvas, 'eng', { logger: m => { if (m.status === 'recognizing text') { ui.ocr = { state: 'busy', pct: m.progress * 100, msg: 'Reading roster…' }; paintOCR(); } } });
+      const r = await Promise.race([window.Tesseract.recognize(canvas, 'eng', { logger: m => { if (m.status === 'recognizing text') { ui.ocr = { state: 'busy', pct: m.progress * 100, msg: 'Reading roster…' }; paintOCR(); } else if (/load/.test(m.status || '')) { ui.ocr = { state: 'busy', pct: 5 + (m.progress || 0) * 10, msg: 'Downloading the text reader (first time only)…' }; paintOCR(); } } }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 120000))]);
+      if (!(r && r.data && r.data.text || '').trim()) { ui.ocr = { state: 'error', msg: 'No words found in that photo. Try a sharper screenshot, or crop to just the roster.' }; paintOCR(); return; }
       ui.raw = (r && r.data && r.data.text || '').trim(); ui.ocr = { state: 'done' }; render(); doParse();
     } catch (e) {
+      if (!navigator.onLine) { ui.ocr = { state: 'error', msg: 'You are offline. Reading a photo the first time needs internet. Connect and try again, or type the shift.' }; paintOCR(); return; }
       ui.ocr = { state: 'error', msg: 'The photo could not be read here (the text reader needs internet, and is blocked in some previews). Tip: open the photo in Google Lens, tap Text then Copy all, and paste it below.' }; paintOCR();
     }
   };
@@ -1791,9 +1859,9 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
   const shiftForm = (sh, tpl) => {
     formShift = sh ? JSON.parse(JSON.stringify(sh)) : Object.assign({ id: null, contractorId: (S.contractors.find(c => !c.archived) || {}).id || '', supervisorName: '', supervisorPhone: '', siteName: '', date: today(), start: '18:00', end: '02:00',
       actualStart: null, actualEnd: null, breakMin: 0, rateType: S.contractors.some(c => !c.archived) ? 'AUTO' : 'CUSTOM', rateCents: 0, flatCents: 0, payDate: '', method: METHODS[0], notes: '', cancelled: false }, tpl || {});
-    if (!sh && !tpl) { const c = conOf(formShift.contractorId); if (c) { formShift.supervisorName = c.contactName || ''; formShift.supervisorPhone = c.phone || ''; formShift.method = c.defaultMethod || METHODS[0]; formShift.payDate = L.payDateFrom(L.endDate(formShift), c.payRule) || ''; } }
+    if (!sh && !tpl) { const c = conOf(formShift.contractorId); if (c) { formShift.supervisorName = c.contactName || ''; formShift.supervisorPhone = c.phone || ''; formShift.method = c.defaultMethod || METHODS[0]; formShift.payDate = L.payDateForShift(formShift, c.payRule) || ''; } }
     const f = formShift;
-    { const c0 = conOf(f.contractorId); formShift._autoPay = !f.payDate || (c0 && f.payDate === L.payDateFrom(L.endDate(f), c0.payRule)); }
+    { const c0 = conOf(f.contractorId); formShift._autoPay = !f.payDate || (c0 && f.payDate === L.payDateForShift(f, c0.payRule)); }
     openModal(`<div class="modal-head"><h3>${sh ? 'Edit shift' : 'New shift'}</h3><button class="btn icon ghost" data-act="closeModal" aria-label="Close">✕</button></div>
       <div class="form" id="sf">
         <label class="field"><span>Contractor</span><select id="sf_con">${conOptions(f.contractorId, false)}</select></label>
@@ -1827,7 +1895,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
   };
   const sfLive = () => {
     const f = sfRead(); const con = conOf(f.contractorId);
-    if (f._autoPay && con && f.date && f.start && f.end) { const pd = L.payDateFrom(L.endDate(f), con.payRule) || ''; const pi = $('#sf_pay'); if (pi && pi.value !== pd) { pi.value = pd; f.payDate = pd; } }
+    if (f._autoPay && con && f.date && f.start && f.end) { const pd = L.payDateForShift(f, con.payRule) || ''; const pi = $('#sf_pay'); if (pi && pi.value !== pd) { pi.value = pd; f.payDate = pd; } }
     const r = L.rateFor(f, con, S.holidays); const tot = L.totalCents(f, con, S.holidays);
     const df = $('#sf_datefmt'); if (df) df.textContent = f.date ? '· ' + L.fmtDate(f.date) : '';
     const rl = $('#sf_rlab'); const ri = $('#sf_rate');
@@ -1838,12 +1906,14 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
   const saveShift = () => {
     const f = sfRead();
     if (!f.date || !f.start || !f.end) { toast('Add a date, start and end time.'); return; }
-    if (L.netMinutes(f) === 0) { toast('Start and end are the same. Check the times.'); return; }
+    if (f.start === f.end) { toast('Start and end are the same. Check the times.'); return; }
+    { const sp = L.shiftSpan(Object.assign({}, f, { actualStart: null, actualEnd: null })); const gross = sp ? (sp.end - sp.start) / 60000 : 0; if ((Number(f.breakMin) || 0) >= gross) { toast('The unpaid break is longer than the shift.'); return; } }
+    if (!f.id && !f._warnedDup && S.shifts.some(s => !s.cancelled && s.date === f.date && s.start === f.start && s.contractorId === f.contractorId)) { f._warnedDup = true; toast('You already have this shift. Tap Save again to add a copy.'); return; }
     if (!f.cancelled && L.totalCents(f, conOf(f.contractorId), S.holidays) === 0 && !f._warnedZero) { f._warnedZero = true; toast('Total pay is $0. Add a rate, or tap Save again to keep it.'); return; }
     const con = conOf(f.contractorId); f.contractorName = con ? con.name : ''; f.supervisorPhone = L.normPhone(f.supervisorPhone);
-    if (!f.payDate && con) f.payDate = L.payDateFrom(L.endDate(f), con.payRule) || '';
+    if (!f.payDate && con) f.payDate = L.payDateForShift(f, con.payRule) || '';
     if (con && f.siteName && !(con.knownSites || []).includes(f.siteName)) (con.knownSites = con.knownSites || []).push(f.siteName);
-    delete f._autoPay; delete f._warnedZero;
+    delete f._autoPay; delete f._warnedZero; delete f._warnedDup;
     if (f.id) { const i = S.shifts.findIndex(s => s.id === f.id); S.shifts[i] = f; }
     else S.shifts.push(Object.assign(f, { id: L.uid(), invoiceId: null, rawText: '', source: 'MANUAL', isDemo: false, createdAt: new Date().toISOString() }));
     buzz(); save(); closeModal(); if (ui.tab === 'scan') go('home'); else render(); toast('Shift saved');
@@ -1874,8 +1944,9 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
   const togglePaid = id => {
     const sh = S.shifts.find(s => s.id === id); const { st } = info(sh);
     if (st.code === 'PAID') {
-      withUndo('Marked as unpaid', () => { S.payments.forEach(p => { p.allocations = (p.allocations || []).filter(a => a.shiftId !== id); p.amountCents = p.allocations.reduce((a, x) => a + x.amountCents, 0); }); S.payments = S.payments.filter(p => p.allocations.length); });
+      withUndo('Marked as unpaid', () => { S.payments = S.payments.filter(p => { const al = p.allocations || []; if (!al.some(a => a.shiftId === id)) return true; const cut = al.filter(a => a.shiftId === id).reduce((x, a) => x + a.amountCents, 0); p.allocations = al.filter(a => a.shiftId !== id); p.amountCents = Math.max(0, p.amountCents - cut); return p.allocations.length > 0 || p.amountCents > 0; }); });
     } else {
+      if (!st.ended && !sh.cancelled) { toast('This shift has not finished yet.'); return; }
       if (st.owed <= 0) { toast('This shift has no amount owed. Check its rate.'); return; }
       withUndo('Marked as paid ' + L.money(st.owed), () => S.payments.push({ id: L.uid(), contractorId: sh.contractorId, date: today(), amountCents: st.owed, method: sh.method || METHODS[0], note: 'Marked paid', allocations: [{ shiftId: id, amountCents: st.owed }], isDemo: false }));
     }
@@ -1916,24 +1987,27 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     const td = today(); const base = ui.calMonth || td.slice(0, 7) + '-01'; ui.calMonth = base; const sel = ui.calSel || td;
     const first = L.parseYMD(base); const startOff = (first.getDay() + 6) % 7; const gridStart = L.addDays(base, -startOff);
     const byDay = {}; S.shifts.forEach(s => { (byDay[s.date] = byDay[s.date] || []).push(s); });
+    const payDays = {}; batches().forEach(b => { if (b.payDate === '0000-nopay' || b.owed <= 0) return; (payDays[b.payDate] = payDays[b.payDate] || []).push(b); });
     let cells = ''; ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(d => { cells += `<div class="dh">${d}</div>`; });
     for (let i = 0; i < 42; i++) {
       const d = L.addDays(gridStart, i); const inM = d.slice(0, 7) === base.slice(0, 7); const list = byDay[d] || [];
       const dots = list.slice(0, 3).map(s => { const st = info(s).st; const c = (CONF[s.id] || []).some(x => x.type === 'CLASH') ? '#F43F5E' : s.cancelled ? '#64748B' : st.overdue ? '#F43F5E' : st.code === 'PAID' ? '#10B981' : st.code === 'UPCOMING' ? (conOf(s.contractorId) || {}).colour || '#D4AF37' : '#E9C46A'; return `<i style="background:${c}"></i>`; }).join('');
-      cells += `<button class="${inM ? '' : 'out'} ${d === td ? 'today' : ''} ${d === sel ? 'sel' : ''}" data-act="calSel" data-d="${d}" aria-label="${esc(L.fmtDate(d))}, ${list.length} shift${list.length === 1 ? '' : 's'}">${+d.slice(8)}<span class="dots">${dots}</span></button>`;
+      cells += `<button class="${inM ? '' : 'out'} ${d === td ? 'today' : ''} ${d === sel ? 'sel' : ''} ${payDays[d] ? 'payday' : ''}" data-act="calSel" data-d="${d}" aria-label="${esc(L.fmtDate(d))}, ${list.length} shift${list.length === 1 ? '' : 's'}">${+d.slice(8)}<span class="dots">${dots}</span></button>`;
       if (i === 34 && L.addDays(gridStart, 35).slice(0, 7) !== base.slice(0, 7)) break;
     }
     const dayList = (byDay[sel] || []).sort((a, b) => a.start < b.start ? -1 : 1);
+    const payHere = payDays[sel] || [];
     return `<div class="page-title"><h2>Calendar</h2></div>
       <section class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:8px"><button class="btn icon ghost" data-act="calNav" data-v="-1" aria-label="Previous month">${ICON.back}</button>
           <b style="font:700 17px var(--f-display);letter-spacing:.04em">${L.MONTHS[first.getMonth()]} ${first.getFullYear()}</b>
           <button class="btn icon ghost" data-act="calNav" data-v="1" aria-label="Next month" style="transform:scaleX(-1)">${ICON.back}</button></div>
         <div class="cal">${cells}</div>
-        <div class="legend" style="margin-top:10px"><span><i style="background:#D4AF37"></i>Upcoming</span><span><i style="background:#E9C46A"></i>To collect</span><span><i style="background:#10B981"></i>Paid</span><span><i style="background:#F43F5E"></i>Clash / overdue</span></div>
+        <div class="legend" style="margin-top:10px"><span><i style="background:#D4AF37"></i>Upcoming</span><span><i style="background:#E9C46A"></i>To collect</span><span><i style="background:#10B981"></i>Paid</span><span><b class="c-gold">$</b> Pay day</span><span><i style="background:#F43F5E"></i>Clash / overdue</span></div>
       </section>
       <div class="sec-title"><h2>${esc(L.fmtDate(sel))}</h2><button class="btn sm outline" data-act="newShiftOn" data-d="${sel}">+ Add</button></div>
-      <div style="display:flex;flex-direction:column;gap:10px">${dayList.length ? dayList.map(shiftCard).join('') : '<div class="card flat empty">No shifts on this day.</div>'}</div>
+      ${payHere.length ? `<div class="warnbox ok">Pay day: ${payHere.map(b => `<b>${L.money(b.owed)}</b> from ${esc((conOf(b.contractorId) || {}).name || 'contractor')} (${esc(periodLabel(b))})`).join('; ')}. <button class="linkbtn" data-act="go" data-tab="pay">Open Pay</button></div>` : ''}
+      <div style="display:flex;flex-direction:column;gap:10px">${dayList.length ? dayList.map(shiftCard).join('') : payHere.length ? '' : '<div class="card flat empty">No shifts on this day.</div>'}</div>
       <section class="card flat"><div class="label">Reminders in your phone calendar</div>
         <p class="small muted">Download your upcoming shifts as a calendar file and open it with Google Calendar. Each shift gets an alert ${S.settings.remindMin >= 60 ? S.settings.remindMin / 60 + ' h' : S.settings.remindMin + ' min'} before it starts, and each pay day gets a 9 am alert, even when this app is closed.</p>
         <button class="btn outline block" data-act="ics">Download calendar file (.ics)</button></section>`;
@@ -1973,9 +2047,8 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
         <div class="card kpi"><div class="label">Paid ${L.MONTHS[+month.slice(5) - 1]}</div><div class="val c-ok" style="font-size:18px">${L.money(paidMonth)}</div></div>
       </div>
       <div class="row"><button class="btn gold grow" data-act="lump">Record a payment</button><button class="btn outline grow" data-act="newInvoice">Create invoice</button></div>
-      ${payTimeline()}
-      <div class="seg" style="align-self:flex-start"><button class="${ui.payView === 'ledger' ? 'on' : ''}" data-act="payView" data-v="ledger">By contractor</button><button class="${ui.payView === 'history' ? 'on' : ''}" data-act="payView" data-v="history">Payment history</button></div>
-      ${ui.payView === 'ledger' ? (cons.length ? cons.map(c => { const k = contractorStats(c); const pending = S.shifts.find(s => s.contractorId === c.id && info(s).st.owed > 0 && info(s).st.ended);
+      <div class="seg seg3"><button class="${ui.payView === 'periods' ? 'on' : ''}" data-act="payView" data-v="periods">Pay periods</button><button class="${ui.payView === 'ledger' ? 'on' : ''}" data-act="payView" data-v="ledger">By contractor</button><button class="${ui.payView === 'history' ? 'on' : ''}" data-act="payView" data-v="history">History</button></div>
+      ${ui.payView === 'periods' ? periodsView() : ui.payView === 'ledger' ? (cons.length ? cons.map(c => { const k = contractorStats(c); const pending = S.shifts.find(s => s.contractorId === c.id && info(s).st.owed > 0 && info(s).st.ended);
         return `<section class="card flat" style="display:flex;flex-direction:column;gap:8px">
           <div class="row" style="justify-content:space-between"><b style="font-size:16px">${esc(c.name)}</b>${k.owed ? `<span class="pill ${S.shifts.some(s => s.contractorId === c.id && info(s).st.overdue) ? 'c-danger' : 'c-owed'}">OWES ${L.money(k.owed)}</span>` : '<span class="pill c-ok">ALL PAID</span>'}</div>
           <div class="meta small muted row" style="gap:4px 14px"><span class="num">${L.fmtHours(k.min)} worked</span><span>Collected ${L.money(k.collected)}</span>${k.oldest ? `<span>Oldest unpaid ${esc(L.fmtShort(k.oldest))}</span>` : ''}</div>
@@ -1983,6 +2056,52 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
           <div class="row"><button class="btn sm" data-act="lump" data-id="${c.id}">Record payment</button><button class="btn sm outline" data-act="newInvoice" data-id="${c.id}">Invoice</button>${pending && c.phone ? `<a class="btn sm outline" target="_blank" rel="noopener" href="https://wa.me/${L.waNumber(c.phone)}?text=${encodeURIComponent(reminderAll(c))}">Remind</a>` : ''}</div>
         </section>`; }).join('') : '<div class="card flat empty"><div class="big">No contractors yet</div>Add one under More → Contractors.</div>')
       : (S.payments.length ? `<section class="card flat"><div class="list">${S.payments.slice().sort((a, b) => a.date < b.date ? 1 : -1).map(p => `<div class="li"><div class="grow"><div class="t"><span class="num">${L.money(p.amountCents)}</span> · ${esc((conOf(p.contractorId) || {}).name || 'Contractor')}</div><div class="small muted">${esc(L.fmtDate(p.date))} · ${esc(p.method)} · ${p.allocations.length} shift${p.allocations.length === 1 ? '' : 's'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm danger" data-act="delPayment" data-id="${p.id}">Delete</button></div>`).join('')}</div></section>` : '<div class="card flat empty">No payments recorded yet.</div>')}`;
+  };
+
+  // ================= PAY PERIODS =================
+  const batches = () => L.payBatches(S.shifts.map(s => s.payDate || s.cancelled ? s : Object.assign({}, s, { payDate: '0000-nopay' })), s => { const { st, min } = info(s); return Object.assign({ minutes: min }, st); }, id => (conOf(id) || {}).payRule);
+  const batchState = b => {
+    const td = today();
+    if (b.payDate === '0000-nopay') return b.owed > 0 || b.notEnded ? { k: 'nopay', pill: 'c-warn', txt: 'NO PAY DAY' } : { k: 'paid', pill: 'c-ok', txt: 'PAID' };
+    if (b.owed <= 0 && !b.notEnded) return { k: 'paid', pill: 'c-ok', txt: 'PAID' };
+    if (b.payDate < td && b.owed > 0) { const n = L.daysBetween(b.payDate, td); return { k: 'late', pill: 'c-danger', txt: n + ' DAY' + (n > 1 ? 'S' : '') + ' LATE' }; }
+    if (b.payDate === td) return { k: 'today', pill: 'c-warn', txt: 'PAY DAY TODAY' };
+    if (b.notEnded) return { k: 'open', pill: 'c-info', txt: 'IN PROGRESS' };
+    const n = L.daysBetween(td, b.payDate); return { k: 'soon', pill: 'c-owed', txt: 'IN ' + n + ' DAY' + (n > 1 ? 'S' : '') };
+  };
+  const batchInvoice = b => { const ids = b.shifts.map(s => s.invoiceId).filter(Boolean); if (!ids.length) return null;
+    const inv = S.invoices.find(i => i.id === ids[0]); return inv ? { inv, all: ids.length === b.shifts.length && ids.every(x => x === ids[0]) } : null; };
+  const periodLabel = b => b.periodStart ? `${b.cycle === 'WEEKLY' ? 'Week' : 'Fortnight'} ${L.fmtShort(b.periodStart)} – ${L.fmtShort(b.periodEnd)}`
+    : b.from === b.to ? `Shift ${L.fmtShort(b.from)}` : `Shifts ${L.fmtShort(b.from)} – ${L.fmtShort(b.to)}`;
+  const periodCard = b => {
+    const st = batchState(b); const con = conOf(b.contractorId) || {}; const ended = b.shifts.filter(s => info(s).st.ended);
+    const owedNow = ended.reduce((a, s) => a + info(s).st.owed, 0); const pct = b.total ? Math.round(b.paid / b.total * 100) : 0;
+    const iv = batchInvoice(b); const open = ui.open.has('pp' + b.key);
+    return `<section class="card flat period p-${st.k}" style="--cc:${con.colour || '#E9C46A'}">
+      <div class="pp-head"><div class="grow" style="min-width:0"><b class="pp-con">${esc(con.name || 'Contractor')}</b><div class="pp-range">${esc(periodLabel(b))}</div></div><span class="pill ${st.pill}">${st.txt}</span></div>
+      <div class="pp-mid"><div><div class="label">${st.k === 'paid' ? 'Received' : 'To collect'}</div><div class="pp-amt num ${st.k === 'paid' ? 'c-ok' : 'c-gold'}">${L.money(st.k === 'paid' ? b.paid : b.owed)}</div></div>
+        <div class="pp-pay"><div class="label">Pay day</div><b class="num">${b.payDate === '0000-nopay' ? '<button class="linkbtn" data-act="editShift" data-id="' + b.shifts[0].id + '">Set it</button>' : esc(L.fmtShort(b.payDate))}</b></div></div>
+      <div class="bar"><span style="width:${pct}%"></span></div>
+      <div class="pp-meta small muted"><span>${b.shifts.length} shift${b.shifts.length > 1 ? 's' : ''}</span><span class="num">${L.fmtHours(b.minutes)}</span><span>Total ${L.money(b.total)}</span>${b.paid ? `<span>Paid ${L.money(b.paid)}</span>` : ''}</div>
+      ${b.notEnded ? `<div class="tiny muted">${b.notEnded} shift${b.notEnded > 1 ? 's' : ''} still to work in this period, so the total can grow.</div>` : ''}
+      ${iv ? `<div class="tiny"><button class="linkbtn" data-act="viewInvoice" data-id="${iv.inv.id}">Invoice ${esc(iv.inv.number)}</button>${iv.all ? '' : ' covers some of these shifts'}</div>` : ''}
+      ${open ? `<div class="list pp-list">${b.shifts.map(s => { const x = info(s).st; return `<div class="li"><div class="grow"><div class="t">${esc(L.fmtShort(s.date))} · ${esc(s.siteName || 'Site')}</div><div class="small muted num">${esc(t(s.actualStart || s.start))}-${esc(t(s.actualEnd || s.end))} · ${L.fmtHours(L.netMinutes(s))}</div></div><b class="num ${x.owed ? 'c-gold' : 'c-ok'}">${L.money(x.owed || x.total)}</b></div>`; }).join('')}</div>` : ''}
+      <div class="row pp-btns">${st.k !== 'paid' && owedNow > 0 ? `<button class="btn sm gold" data-act="batchPaid" data-k="${esc(b.key)}">Got paid ${L.money(owedNow)}</button>` : ''}
+        ${st.k !== 'paid' && ended.length && !(iv && iv.all) ? `<button class="btn sm outline" data-act="batchInvoice" data-k="${esc(b.key)}">Invoice</button>` : ''}
+        <button class="btn sm ghost" data-act="batchOpen" data-k="${esc(b.key)}">${open ? 'Hide shifts' : 'Shifts'}</button>
+        ${st.k === 'late' && con.phone ? `<a class="btn sm outline" target="_blank" rel="noopener" href="https://wa.me/${L.waNumber(con.phone)}?text=${encodeURIComponent(batchReminder(b))}">Remind</a>` : ''}</div>
+    </section>`;
+  };
+  const batchReminder = b => { const con = conOf(b.contractorId) || {}; const p = S.profile;
+    let m = `Hi ${con.contactName || ''}, a quick reminder: pay for ${periodLabel(b).toLowerCase()} (${b.shifts.length} shift${b.shifts.length > 1 ? 's' : ''}) was due ${L.fmtDate(b.payDate)}. Still owed: ${L.money(b.owed)}.`;
+    if (S.settings.includeBank && p.bsb) m += `\nBank: ${p.accountName || p.fullName}, BSB ${p.bsb}, Acc ${p.accountNumber}`;
+    return m + `\nThanks, ${p.fullName || ''}`; };
+  const periodsView = () => {
+    const all = batches(); const live = all.filter(b => batchState(b).k !== 'paid'); const done = all.filter(b => batchState(b).k === 'paid').reverse().slice(0, ui.morePaid ? 50 : 4);
+    const noRule = S.contractors.filter(c => !c.archived && S.shifts.some(s => s.contractorId === c.id) && !(c.payRule && c.payRule.type));
+    return `${live.length ? live.map(periodCard).join('') : `<div class="card flat empty"><div class="big">Nothing to collect</div>Every pay period is paid. New shifts show up here, grouped by pay day.</div>`}
+      ${noRule.length ? `<div class="warnbox">Set a pay cycle for ${noRule.map(c => esc(c.name)).join(', ')} so shifts group into the right pay period. <button class="linkbtn" data-act="conForm" data-id="${noRule[0].id}">Set now</button></div>` : ''}
+      ${done.length ? `<div class="sec-title"><h2>Paid</h2></div>${done.map(periodCard).join('')}${all.filter(b => batchState(b).k === 'paid').length > 4 && !ui.morePaid ? '<button class="btn ghost" data-act="morePaid">Show older paid periods</button>' : ''}` : ''}`;
   };
   const reminderAll = c => {
     const list = S.shifts.filter(s => s.contractorId === c.id && info(s).st.owed > 0 && info(s).st.ended).sort((a, b) => a.date < b.date ? -1 : 1);
@@ -2016,7 +2135,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     if (!l.expiry) return { d: null, cls: 'c-muted', txt: 'NO EXPIRY', col: 'var(--line-2)', bar: null };
     const d = L.daysBetween(today(), l.expiry);
     if (d < 0) return { d, cls: 'c-danger', txt: `EXPIRED ${-d} DAY${d === -1 ? '' : 'S'} AGO`, col: 'rgba(244,63,94,.6)', bar: '#F43F5E' };
-    if (d <= 30) return { d, cls: 'c-warn', txt: `EXPIRES IN ${d} DAY${d === 1 ? '' : 'S'}`, col: 'rgba(245,158,11,.6)', bar: '#F59E0B' };
+    if (d <= 30) return { d, cls: 'c-warn', txt: d === 0 ? 'EXPIRES TODAY' : `EXPIRES IN ${d} DAY${d === 1 ? '' : 'S'}`, col: 'rgba(245,158,11,.6)', bar: '#F59E0B' };
     return { d, cls: 'c-ok', txt: `VALID · ${d} DAYS LEFT`, col: 'var(--line-2)', bar: '#10B981' };
   };
   const fileMeta = {}; // id -> {name,type,size,w,h}
@@ -2197,8 +2316,10 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
           <label class="field"><span>Sunday</span><input id="cf_ru" inputmode="decimal" value="${L.centsToInput(r.sunday)}"></label><label class="field"><span>Public hol</span><input id="cf_rp" inputmode="decimal" value="${L.centsToInput(r.publicHoliday)}"></label></div>
         <div class="grid2"><label class="field"><span>Night starts</span><input type="time" id="cf_ns" value="${esc(c.nightStart)}"></label><label class="field"><span>Night ends</span><input type="time" id="cf_ne" value="${esc(c.nightEnd)}"></label></div>
         <p class="tiny faint" style="margin:-4px 0 0">Rate is picked by when the shift starts: public holiday, then Sunday, Saturday, night, weekday. Empty rates fall back to the weekday rate.</p>
-        <div class="grid2"><label class="field"><span>Pay day rule</span><select id="cf_pt">${Object.entries(L.PAY_RULE_LABEL).map(([k, l]) => `<option value="${k}" ${pr.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-          <div id="cf_pvBox"></div></div>
+        <div class="label c-gold" style="margin-top:4px">How they pay you</div>
+        <label class="field"><span>Pay cycle</span><select id="cf_pt">${Object.entries(L.PAY_RULE_LABEL).map(([k, l]) => `<option value="${k}" ${pr.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <div class="grid2"><div id="cf_pvBox"></div><div id="cf_afterBox"></div></div>
+        <div class="tiny c-gold" id="cf_pprev"></div>
         <div class="grid2"><label class="field"><span>Usual payment method</span><select id="cf_m">${METHODS.map(m => `<option ${c.defaultMethod === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
           <label class="field"><span>Colour</span><select id="cf_col">${COLOURS.map((x, i) => `<option value="${x}" ${c.colour === x ? 'selected' : ''}>${['Gold', 'Sky', 'Violet', 'Mint', 'Rose', 'Amber', 'Blue', 'Pink'][i]}</option>`).join('')}</select></label></div>
         <label class="field"><span>Known sites (comma separated)</span><input id="cf_sites" value="${esc((c.knownSites || []).join(', '))}"></label>
@@ -2210,20 +2331,39 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     const type = $('#cf_pt').value; const box = $('#cf_pvBox'); pr = pr || {};
     if (type === 'WEEKLY_DAY') box.innerHTML = `<label class="field"><span>Day</span><select id="cf_pv">${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((d, i) => `<option value="${i}" ${Number(pr.value ?? 4) === i ? 'selected' : ''}>${d}</option>`).join('')}</select></label>`;
     else if (type === 'DAYS_AFTER_SHIFT') box.innerHTML = `<label class="field"><span>Days after</span><input id="cf_pv" type="number" min="0" value="${esc(pr.value ?? 7)}"></label>`;
-    else if (type === 'FORTNIGHTLY') box.innerHTML = `<label class="field"><span>A known pay date</span><input id="cf_pa" type="date" value="${esc(pr.anchor || today())}"></label>`;
+    else if (type === 'FORTNIGHTLY' || type === 'WEEKLY') {
+      const n = pr.type === type ? L.normRule(pr) : { periodStart: L.mondayOf(today()), payAfter: 4 };
+      box.innerHTML = `<label class="field"><span>${type === 'WEEKLY' ? 'Week' : 'Fortnight'} starts</span><input id="cf_ps" type="date" value="${esc(n.periodStart)}"></label>`;
+      const after = $('#cf_afterBox'); after.innerHTML = `<label class="field"><span>Paid</span><select id="cf_pa">${[0, 1, 2, 3, 4, 5, 6, 7, 10, 14].map(k => `<option value="${k}" ${Number(n.payAfter) === k ? 'selected' : ''}>${k === 0 ? 'on last day' : k + ' day' + (k > 1 ? 's' : '') + ' after'}</option>`).join('')}</select></label>`;
+      cfPreview(); return;
+    }
     else box.innerHTML = '';
+    const after = $('#cf_afterBox'); if (after) after.innerHTML = ''; const pv = $('#cf_pprev'); if (pv) pv.textContent = '';
   };
+  const cfPreview = () => { const el = $('#cf_pprev'); if (!el) return; const type = $('#cf_pt').value; const ps = ($('#cf_ps') || {}).value;
+    if (!ps) { el.textContent = 'Pick the first day of any pay period you know.'; return; }
+    const r = { type, periodStart: ps, payAfter: Number(($('#cf_pa') || {}).value || 4) }; const p1 = L.periodOf(today(), r); const p2 = L.periodOf(L.addDays(p1.end, 1), r);
+    el.innerHTML = `This ${type === 'WEEKLY' ? 'week' : 'fortnight'}: <b>${L.fmtShort(p1.start)} – ${L.fmtShort(p1.end)}</b>, paid <b>${L.fmtDate(p1.pay)}</b>.<br>Next: ${L.fmtShort(p2.start)} – ${L.fmtShort(p2.end)}, paid ${L.fmtDate(p2.pay)}.`; };
   const conSave = id => {
     const g = k => ($('#' + k) || {}).value;
     const name = g('cf_name').trim(); if (!name) { toast('Add the company name.'); return; }
-    const type = g('cf_pt'); const rule = { type, value: type === 'WEEKLY_DAY' || type === 'DAYS_AFTER_SHIFT' ? Number(g('cf_pv')) : null, anchor: type === 'FORTNIGHTLY' ? g('cf_pa') : null };
+    const type = g('cf_pt'); const cyc = type === 'FORTNIGHTLY' || type === 'WEEKLY';
+    if (cyc && !g('cf_ps')) { toast('Pick the day a pay period starts.'); return; }
+    const rule = { type, value: type === 'WEEKLY_DAY' || type === 'DAYS_AFTER_SHIFT' ? Number(g('cf_pv')) : null, periodStart: cyc ? g('cf_ps') : null, payAfter: cyc ? Number(g('cf_pa')) : null };
+    if (type === 'DAYS_AFTER_SHIFT' && (isNaN(rule.value) || rule.value < 0)) { toast('Days after must be 0 or more.'); return; }
+    if (!L.normPhone(g('cf_ph')) && g('cf_ph').trim()) { toast('Check the mobile number.'); return; }
+    const dupe = S.contractors.find(c => c.id !== id && !c.archived && c.name.trim().toLowerCase() === name.toLowerCase()); if (dupe) { toast('You already have a contractor called ' + dupe.name + '.'); return; }
     const v = { name, contactName: g('cf_cn').trim(), phone: L.normPhone(g('cf_ph')),
       rates: { weekday: L.toCents(g('cf_rw')), night: L.toCents(g('cf_rn')), saturday: L.toCents(g('cf_rs')), sunday: L.toCents(g('cf_ru')), publicHoliday: L.toCents(g('cf_rp')) },
       nightStart: g('cf_ns') || '19:00', nightEnd: g('cf_ne') || '06:00', payRule: rule, defaultMethod: g('cf_m'), colour: g('cf_col'),
       knownSites: g('cf_sites').split(',').map(s => s.trim()).filter(Boolean) };
-    if (id) { Object.assign(conOf(id), v); S.shifts.forEach(s => { if (s.contractorId === id) s.contractorName = v.name; }); }
+    let moved = 0;
+    if (id) { const old = conOf(id); const oldRule = JSON.stringify(old.payRule || {}); Object.assign(old, v);
+      S.shifts.forEach(s => { if (s.contractorId !== id) return; s.contractorName = v.name;
+        // new pay cycle: move pay dates of shifts that have nothing paid and are not on an invoice
+        if (oldRule !== JSON.stringify(rule) && !s.cancelled && info(s).st.paid === 0 && !s.invoiceId) { const pd = L.payDateForShift(s, rule); if (pd && pd !== s.payDate) { s.payDate = pd; moved++; } } }); }
     else S.contractors.push(newContractor(v));
-    save(); closeModal(); render(); toast('Contractor saved');
+    save(); closeModal(); render(); toast(moved ? `Saved. ${moved} unpaid shift${moved > 1 ? 's' : ''} moved to the new pay days.` : 'Contractor saved');
   };
 
   // --- invoices
@@ -2244,19 +2384,24 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
         <button class="btn gold" data-act="saveProfile">Save my details</button>
       </section>`;
   };
-  const invoiceDraft = conId => {
+  const invBatches = conId => batches().filter(b => b.contractorId === conId && b.owed > 0 && b.shifts.some(s => info(s).st.ended));
+  const nextInvNumber = () => { const y = new Date().getFullYear(); let seq = S.profile.nextInvoiceSeq || 1; let n;
+    do { n = `INV-${y}-${String(seq).padStart(4, '0')}`; seq++; } while (S.invoices.some(i => i.number === n)); return n; };
+  const invoiceDraft = (conId, batchKey) => {
     conId = conId || (S.contractors.find(c => S.shifts.some(s => s.contractorId === c.id && info(s).st.ended && info(s).st.owed > 0 && !s.invoiceId)) || S.contractors[0] || {}).id || '';
-    const seq = S.profile.nextInvoiceSeq || 1;
-    return { conId, scope: 'OWED', from: L.addDays(today(), -30), to: today(), number: `INV-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`, issueDate: today(), dueDate: L.addDays(today(), 7), picked: null };
+    const bs = invBatches(conId); const b = (batchKey && bs.find(x => x.key === batchKey)) || bs.find(x => x.shifts.some(s => info(s).st.ended && !s.invoiceId)) || bs[0];
+    const d = { conId, scope: b ? 'PERIOD' : 'OWED', batchKey: b ? b.key : '', from: L.addDays(today(), -30), to: today(), number: nextInvNumber(), issueDate: today(), dueDate: L.addDays(today(), 7), picked: null };
+    if (b && b.payDate !== '0000-nopay') d.dueDate = b.payDate < today() ? today() : b.payDate; return d;
   };
-  const invCandidates = d => S.shifts.filter(s => s.contractorId === d.conId && !s.cancelled && info(s).st.ended && (d.scope === 'OWED' ? info(s).st.owed > 0 : (s.date >= d.from && s.date <= d.to))).sort((a, b) => a.date < b.date ? -1 : 1);
-  const invLines = d => { const cands = invCandidates(d); const picked = d.picked || cands.map(s => s.id);
+  const invOnOther = (s, d) => s.invoiceId && S.invoices.some(i => i.id === s.invoiceId) && s.invoiceId !== d.id;
+  const invCandidates = d => S.shifts.filter(s => s.contractorId === d.conId && !s.cancelled && info(s).st.ended && (d.scope === 'PERIOD' ? d.batchKey === s.contractorId + '|' + (s.payDate || '0000-nopay') : d.scope === 'OWED' ? info(s).st.owed > 0 : (s.date >= d.from && s.date <= d.to))).sort((a, b) => a.date < b.date ? -1 : 1);
+  const invLines = d => { const cands = invCandidates(d); const picked = d.picked || cands.filter(s => !invOnOther(s, d)).map(s => s.id);
     return cands.filter(s => picked.includes(s.id)).map(s => { const { st, rate, min } = info(s); return { shiftId: s.id, date: s.date, site: s.siteName, start: s.actualStart || s.start, end: s.actualEnd || s.end, minutes: min, rateCents: rate.type === 'FLAT' ? 0 : rate.cents, flat: rate.type === 'FLAT', amount: st.total, paid: Math.min(st.paid, st.total), balance: st.owed }; }); };
   const invoicePaper = inv => {
     const p = inv.profile; const tt = inv.totals;
     return `<div class="paper"><div class="inv-top"><div><h1>${L.invoiceTitle()}</h1>
         <div style="margin-top:8px"><b>${esc(p.tradingName || p.fullName || 'Your name')}</b>${p.tradingName && p.fullName ? '<br>' + esc(p.fullName) : ''}${p.licenceNo ? '<br>Security licence ' + esc(p.licenceNo) : ''}${p.phone ? '<br>' + esc(p.phone) : ''}${p.email ? '<br>' + esc(p.email) : ''}</div></div>
-      <div style="text-align:right"><div class="r" style="font-weight:700;font-size:14px">${esc(inv.number)}</div>Issued ${esc(L.fmtDate(inv.issueDate))}<br>Due ${esc(L.fmtDate(inv.dueDate))}
+      <div style="text-align:right"><div class="r" style="font-weight:700;font-size:14px">${esc(inv.number)}</div>Issued ${esc(L.fmtDate(inv.issueDate))}<br>Due ${esc(L.fmtDate(inv.dueDate))}${inv.period ? `<br>${esc(inv.period)}` : ''}
         <div style="margin-top:8px"><b>Bill to</b><br>${esc(inv.contractorName)}${inv.contact ? '<br>Attn: ' + esc(inv.contact) : ''}</div></div></div>
       <div style="overflow-x:auto"><table><thead><tr><th>Date</th><th>Site</th><th>Times</th><th class="r">Hours</th><th class="r">Rate</th><th class="r">Amount</th><th class="r">Paid</th><th class="r">Balance</th></tr></thead><tbody>
         ${inv.lines.map(l => `<tr><td>${esc(L.fmtShort(l.date))}</td><td>${esc(l.site)}</td><td class="r">${esc(l.start)}-${esc(l.end)}</td><td class="r">${(l.minutes / 60).toFixed(2)}</td><td class="r">${l.flat ? 'flat' : L.money(l.rateCents)}</td><td class="r">${L.money(l.amount)}</td><td class="r">${L.money(l.paid)}</td><td class="r">${L.money(l.balance)}</td></tr>`).join('')}
@@ -2269,35 +2414,38 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
   const buildInv = d => {
     const con = conOf(d.conId) || {}; const lines = invLines(d); const p = S.profile;
     return { id: d.id || null, number: d.number, contractorId: d.conId, contractorName: con.name || '', contact: con.contactName || '',
-      issueDate: d.issueDate, dueDate: d.dueDate, lines, totals: L.invoiceTotals(lines), shiftIds: lines.map(l => l.shiftId),
+      issueDate: d.issueDate, dueDate: d.dueDate, period: d.scope === 'PERIOD' ? (() => { const b = batches().find(x => x.key === d.batchKey); return b ? periodLabel(b) : ''; })() : d.scope === 'RANGE' ? `Shifts ${L.fmtShort(d.from)} – ${L.fmtShort(d.to)}` : '', lines, totals: L.invoiceTotals(lines), shiftIds: lines.map(l => l.shiftId),
       profile: { fullName: p.fullName, tradingName: p.tradingName, licenceNo: p.licenceNo, phone: p.phone, email: p.email, bankName: p.bankName, accountName: p.accountName, bsb: p.bsb, accountNumber: p.accountNumber }, status: 'DRAFT' };
   };
-  const invText = inv => `${L.invoiceTitle()} ${inv.number}\nFrom: ${inv.profile.tradingName || inv.profile.fullName || ''}${inv.profile.licenceNo ? ' (Security licence ' + inv.profile.licenceNo + ')' : ''}\nTo: ${inv.contractorName}\nIssued ${L.fmtDate(inv.issueDate)}, due ${L.fmtDate(inv.dueDate)}\n\n` +
+  const invText = inv => `${L.invoiceTitle()} ${inv.number}\nFrom: ${inv.profile.tradingName || inv.profile.fullName || ''}${inv.profile.licenceNo ? ' (Security licence ' + inv.profile.licenceNo + ')' : ''}\nTo: ${inv.contractorName}\nIssued ${L.fmtDate(inv.issueDate)}, due ${L.fmtDate(inv.dueDate)}${inv.period ? '\n' + inv.period : ''}\n\n` +
     inv.lines.map(l => `${L.fmtShort(l.date)} ${l.site} ${l.start}-${l.end} ${(l.minutes / 60).toFixed(2)}h ${l.flat ? 'flat' : '@ ' + L.money(l.rateCents)} = ${L.money(l.amount)}${l.paid ? ' (paid ' + L.money(l.paid) + ')' : ''}`).join('\n') +
     `\n\nTotal hours: ${(inv.totals.minutes / 60).toFixed(2)}\nGross: ${L.money(inv.totals.gross)}\nLess paid: ${L.money(inv.totals.paid)}\nBALANCE DUE: ${L.money(inv.totals.due)}\n\nBank: ${inv.profile.accountName || inv.profile.fullName}, BSB ${inv.profile.bsb || '-'}, Acc ${inv.profile.accountNumber || '-'}\nReference: ${inv.number}`;
-  const invoiceModal = conId => {
+  const invoiceModal = (conId, batchKey) => {
     if (!S.contractors.length) { toast('Add a contractor first.'); return; }
-    ui.invDraft = invoiceDraft(conId); paintInvoiceModal();
+    ui.invDraft = invoiceDraft(conId, batchKey); paintInvoiceModal();
   };
   const paintInvoiceModal = () => {
-    const d = ui.invDraft; const cands = invCandidates(d); const picked = d.picked || cands.map(s => s.id); const inv = buildInv(d);
+    const d = ui.invDraft; const cands = invCandidates(d); const picked = d.picked || cands.filter(s => !invOnOther(s, d)).map(s => s.id); const inv = buildInv(d); const bs = invBatches(d.conId);
     const con = conOf(d.conId) || {};
     openModal(`<div class="modal-head"><h3>New invoice</h3><button class="btn icon ghost" data-act="closeModal" aria-label="Close">✕</button></div>
       <div class="form">
         <label class="field"><span>Bill to</span><select id="iv_con">${conOptions(d.conId, false)}</select></label>
-        <div class="seg" style="align-self:flex-start"><button class="${d.scope === 'OWED' ? 'on' : ''}" data-act="ivScope" data-v="OWED">Shifts still owed</button><button class="${d.scope === 'RANGE' ? 'on' : ''}" data-act="ivScope" data-v="RANGE">Date range</button></div>
+        <div class="seg seg3"><button class="${d.scope === 'PERIOD' ? 'on' : ''}" data-act="ivScope" data-v="PERIOD">Pay period</button><button class="${d.scope === 'OWED' ? 'on' : ''}" data-act="ivScope" data-v="OWED">All owed</button><button class="${d.scope === 'RANGE' ? 'on' : ''}" data-act="ivScope" data-v="RANGE">Dates</button></div>
+        ${d.scope === 'PERIOD' ? (bs.length ? `<label class="field"><span>Pay period</span><select id="iv_batch">${bs.map(b => `<option value="${esc(b.key)}" ${b.key === d.batchKey ? 'selected' : ''}>${esc(periodLabel(b))} · ${b.payDate === '0000-nopay' ? 'no pay day' : 'pay ' + esc(L.fmtShort(b.payDate))} · ${L.money(b.owed)}</option>`).join('')}</select></label>` : '') : ''}
         ${d.scope === 'RANGE' ? `<div class="grid2"><label class="field"><span>From</span><input type="date" id="iv_from" value="${d.from}"></label><label class="field"><span>To</span><input type="date" id="iv_to" value="${d.to}"></label></div>` : ''}
         <label class="field"><span>Invoice number</span><input id="iv_num" value="${esc(d.number)}"></label>
         <div class="grid2"><label class="field"><span>Issued</span><input type="date" id="iv_iss" value="${d.issueDate}"></label><label class="field"><span>Due</span><input type="date" id="iv_due" value="${d.dueDate}"></label></div>
         <div class="label">Shifts included (${picked.filter(id => cands.some(c => c.id === id)).length} of ${cands.length})</div>
-        ${cands.length ? `<div class="list">${cands.map(s => `<label class="check-row"><input type="checkbox" data-iv-pick="${s.id}" ${picked.includes(s.id) ? 'checked' : ''}><span class="grow small">${esc(L.fmtShort(s.date))} · ${esc(s.siteName)} · <span class="num">${L.money(info(s).st.total)}</span>${info(s).st.paid ? ' (paid ' + L.money(info(s).st.paid) + ')' : ''}</span></label>`).join('')}</div>` : `<div class="warnbox ok">No ${d.scope === 'OWED' ? 'unpaid finished' : ''} shifts for ${esc(con.name || 'this contractor')}${d.scope === 'RANGE' ? ' in these dates' : ''}.</div>`}
+        ${cands.length ? `<div class="list">${cands.map(s => { const other = invOnOther(s, d) ? S.invoices.find(i => i.id === s.invoiceId) : null; return `<label class="check-row"><input type="checkbox" data-iv-pick="${s.id}" ${picked.includes(s.id) ? 'checked' : ''}><span class="grow small">${esc(L.fmtShort(s.date))} · ${esc(s.siteName)} · <span class="num">${L.money(info(s).st.total)}</span>${info(s).st.paid ? ' (paid ' + L.money(info(s).st.paid) + ')' : ''}${other ? ` <span class="pill c-warn">ON ${esc(other.number)}</span>` : ''}</span></label>`; }).join('')}</div>` : `<div class="warnbox ok">No ${d.scope === 'RANGE' ? '' : 'unpaid finished'} shifts for ${esc(con.name || 'this contractor')}${d.scope === 'RANGE' ? ' in these dates' : ''}.</div>`}
         ${!S.profile.fullName || !S.profile.bsb ? '<div class="warnbox warn">Your name or bank details are missing. Add them under More → Invoices.</div>' : ''}
         <div class="label">Preview</div>${invoicePaper(inv)}
       </div>
       <div class="sticky-actions"><button class="btn" data-act="ivCopy">Copy text</button><button class="btn gold" data-act="ivSave" ${inv.lines.length ? '' : 'disabled'}>Save &amp; mark sent</button></div>`);
   };
   const ivRead = () => { const d = ui.invDraft; const g = id => ($('#' + id) || {}).value;
-    const nc = g('iv_con'); if (nc && nc !== d.conId) { d.conId = nc; d.picked = null; }
+    if ($('#iv_num')) { d.number = g('iv_num'); d.issueDate = g('iv_iss'); d.dueDate = g('iv_due'); }
+    const nc = g('iv_con'); if (nc && nc !== d.conId) { const nd = invoiceDraft(nc); Object.assign(d, { conId: nc, picked: null, scope: nd.scope, batchKey: nd.batchKey, dueDate: nd.dueDate }); return; }
+    const nb = g('iv_batch'); if (nb && nb !== d.batchKey) { d.batchKey = nb; d.picked = null; const b = batches().find(x => x.key === nb); if (b) { d.dueDate = b.payDate < today() ? today() : b.payDate; const di = $('#iv_due'); if (di) di.value = d.dueDate; } }
     if ($('#iv_from')) { d.from = g('iv_from'); d.to = g('iv_to'); }
     d.number = g('iv_num'); d.issueDate = g('iv_iss'); d.dueDate = g('iv_due'); };
   const invoiceView = id => {
@@ -2382,7 +2530,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
   const restoreDo = async mode => {
     const d = ui.restore; if (!d) return; const base = blank();
     if (mode === 'replace') { await DB.fileClear(); Object.keys(fileMeta).forEach(k => delete fileMeta[k]); }
-    if (mode === 'replace') { S = Object.assign(base, d); S.settings = Object.assign(base.settings, d.settings || {}); S.profile = Object.assign(base.profile, d.profile || {}); }
+    if (mode === 'replace') { const lock = { pinHash: S.settings.pinHash, pinLen: S.settings.pinLen, bioId: S.settings.bioId }; S = Object.assign(base, d); S.settings = Object.assign(base.settings, d.settings || {}, lock); S.profile = Object.assign(base.profile, d.profile || {}); }
     else {
       ['contractors', 'shifts', 'payments', 'invoices', 'licences'].forEach(k => { (d[k] || []).forEach(x => { const i = S[k].findIndex(y => y.id === x.id); if (i >= 0) S[k][i] = x; else S[k].push(x); }); });
       (d.holidays || []).forEach(h => { if (!S.holidays.some(x => x.date === h.date)) S.holidays.push(h); });
@@ -2393,7 +2541,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     delete S.files; migrate();
     ui.restore = null; save(); closeModal(); render(); toast('Backup restored');
   };
-  const backupJSON = () => { S.settings.lastBackup = new Date().toISOString(); save(); return JSON.stringify(Object.assign({}, S, { exportedAt: new Date().toISOString(), settings: Object.assign({}, S.settings, { pinHash: null, bioId: null }) }), null, 1); };
+  const backupJSON = () => { S.settings.lastBackup = new Date().toISOString(); save(); return JSON.stringify(Object.assign({}, S, { exportedAt: new Date().toISOString(), settings: Object.assign({}, S.settings, { pinHash: null, pinLen: null, bioId: null }) }), null, 1); };
 
   // PIN
   const hashPin = async pin => {
@@ -2441,26 +2589,35 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     el.innerHTML = `<div class="emblem" style="width:56px;height:56px">${ICON.shield}</div><h2 class="gold-text">GUARDSHIFT ROYALE</h2><div class="muted">${title}</div>
       <div class="pin-dots" id="pinDots"></div><div class="small c-danger" id="pinErr" style="min-height:18px"></div>
       <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-pin="${n}">${n}</button>`).join('')}<button data-pin="del" aria-label="Delete">⌫</button><button data-pin="0">0</button><button data-pin="ok" style="font-size:15px;font-family:var(--f-body)">OK</button></div>
-      ${mode !== 'unlock' ? '<button class="btn ghost" data-pin="cancel">Cancel</button>' : ''}
+      ${mode !== 'unlock' ? '<button class="btn ghost" data-pin="cancel">Cancel</button>' : '<button class="btn ghost sm" data-pin="forgot" id="pinForgot" hidden>Forgot PIN?</button>'}
       ${mode === 'unlock' && S.settings.bioId ? `<button class="btn outline" data-pin="bio" style="gap:10px"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 11v4M8.5 7.5A5 5 0 0 1 17 11v2.5M7 11a5 5 0 0 1 .4-2M7 14c0 2 .5 3.5 1.5 5M10 11a2 2 0 0 1 4 0v3c0 2.5.6 4 1.5 5.5M17 16.5c0 1 .2 2 .5 2.8M5 8a8.5 8.5 0 0 1 14 1.5"/></svg>Use fingerprint</button>` : ''}`;
     paintDots();
     if (mode === 'unlock' && S.settings.bioId) setTimeout(bioUnlock, 300);
   };
-  const paintDots = () => { const d = $('#pinDots'); if (d) d.innerHTML = Array.from({ length: Math.max(4, pinBuf.length) }, (_, i) => `<i class="${i < pinBuf.length ? 'f' : ''}"></i>`).join(''); };
+  const paintDots = () => { const d = $('#pinDots'); if (d) d.innerHTML = Array.from({ length: Math.max(pinMode === 'unlock' && S.settings.pinLen ? S.settings.pinLen : 4, pinBuf.length) }, (_, i) => `<i class="${i < pinBuf.length ? 'f' : ''}"></i>`).join(''); };
+  let pinWrong = 0;
   const pinKey = async k => {
+    if (k === 'forgot') { const el = $('#lock');
+      el.innerHTML = `<div class="emblem" style="width:56px;height:56px">${ICON.shield}</div><h2 class="gold-text">Forgot your PIN?</h2>
+        <p class="muted small" style="max-width:300px;text-align:center">Your data is locked on this phone only, so the PIN cannot be sent to you.${S.settings.bioId ? ' Use your fingerprint to get in, then change the PIN in Settings.' : ''}<br><br>Or erase this app and restore your latest backup file (More → Settings → Restore). Type <b>ERASE</b> to do that.</p>
+        ${S.settings.bioId ? '<button class="btn gold" data-pin="bio">Use fingerprint</button>' : ''}
+        <input id="eraseTxt" placeholder="Type ERASE" style="max-width:220px;text-align:center" autocomplete="off"><button class="btn outline" data-pin="erase">Erase and start again</button><button class="btn ghost" data-pin="back">Back</button>`; return; }
+    if (k === 'back') { showLock('unlock'); return; }
+    if (k === 'erase') { if (($('#eraseTxt').value || '').trim().toUpperCase() !== 'ERASE') { toast('Type ERASE to confirm.'); return; } await DB.fileClear(); S = blank(); S.settings.onboarded = true; save(); flushSave(); $('#lock').hidden = true; render(); toast('App erased. Restore your backup from More → Settings.'); return; }
     if (k === 'cancel') { $('#lock').hidden = true; return; }
     if (k === 'bio') { bioUnlock(); return; }
     if (k === 'del') { pinBuf = pinBuf.slice(0, -1); paintDots(); return; }
-    if (k !== 'ok') { if (pinBuf.length < 6) pinBuf += k; paintDots(); if (!(pinMode === 'unlock' && pinBuf.length >= 4)) return; if (pinMode === 'unlock') { const h = await hashPin(pinBuf); if (h === S.settings.pinHash) { $('#lock').hidden = true; lastHidden = null; } else if (pinBuf.length === 6) { $('#pinErr').textContent = 'Wrong PIN'; pinBuf = ''; paintDots(); } } return; }
+    if (k !== 'ok') { if (pinBuf.length < 6) pinBuf += k; paintDots(); if (!(pinMode === 'unlock' && pinBuf.length >= 4)) return; if (pinMode === 'unlock') { const h = await hashPin(pinBuf); if (h === S.settings.pinHash) { $('#lock').hidden = true; lastHidden = null; pinWrong = 0; } else if (pinBuf.length === (S.settings.pinLen || 6)) { pinWrong++; buzz([60, 40, 60]); $('#pinErr').textContent = 'Wrong PIN'; pinBuf = ''; paintDots(); if (pinWrong >= 2 && $('#pinForgot')) $('#pinForgot').hidden = false; } } return; }
+    if (!pinBuf.length) return;
     if (pinBuf.length < 4) { $('#pinErr').textContent = 'Use 4 to 6 digits'; return; }
-    if (pinMode === 'unlock') { const h = await hashPin(pinBuf); if (h === S.settings.pinHash) { $('#lock').hidden = true; } else { $('#pinErr').textContent = 'Wrong PIN'; pinBuf = ''; paintDots(); } }
+    if (pinMode === 'unlock') { const h = await hashPin(pinBuf); if (h === S.settings.pinHash) { $('#lock').hidden = true; pinWrong = 0; } else { pinWrong++; $('#pinErr').textContent = 'Wrong PIN'; pinBuf = ''; paintDots(); if (pinWrong >= 2 && $('#pinForgot')) $('#pinForgot').hidden = false; } }
     else if (pinMode === 'set1') { pinFirst = pinBuf; showLock('set2'); }
-    else if (pinMode === 'set2') { if (pinBuf !== pinFirst) { pinFirst = ''; showLock('set1'); $('#pinErr').textContent = 'PINs did not match. Try again.'; return; } S.settings.pinHash = await hashPin(pinBuf); save(); $('#lock').hidden = true; render(); toast('PIN set'); }
+    else if (pinMode === 'set2') { if (pinBuf !== pinFirst) { pinFirst = ''; showLock('set1'); $('#pinErr').textContent = 'PINs did not match. Try again.'; return; } S.settings.pinHash = await hashPin(pinBuf); S.settings.pinLen = pinBuf.length; save(); $('#lock').hidden = true; render(); toast('PIN set'); }
   };
   let lastHidden = null;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { lastHidden = Date.now(); flushSave(); if (S.settings.pinHash) document.body.classList.add('privacy'); }
-    else { document.body.classList.remove('privacy'); if (S.settings.pinHash && lastHidden && Date.now() - lastHidden > 120000) showLock('unlock'); else if (lastHidden && Date.now() - lastHidden > 60000) refreshLive(true); }
+    else { document.body.classList.remove('privacy'); if (S.settings.pinHash && lastHidden && Date.now() - lastHidden > 120000) showLock('unlock'); else if (lastHidden && Date.now() - lastHidden > 60000) { INFO = new WeakMap(); if (ui.tab === 'home') refreshLive(true); else if (ui.tab !== 'scan' && $('#modalRoot').hidden) { const y = window.scrollY; render(); window.scrollTo(0, y); } } }
   });
 
   // notifications while open
@@ -2525,9 +2682,11 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
         <button class="btn danger" data-act="delShift" data-id="${id}">Delete shift</button>
         <button class="btn ghost" data-act="closeModal">Close</button></div>`); },
     dupShift: el => { const s = S.shifts.find(x => x.id === el.dataset.id); const n = +el.dataset.n; closeModal();
-      withUndo(n > 1 ? `Added ${n} weekly shifts` : 'Shift duplicated', () => { for (let i = 1; i <= n; i++) { const c = JSON.parse(JSON.stringify(s)); Object.assign(c, { id: L.uid(), date: L.addDays(s.date, 7 * i), actualStart: null, actualEnd: null, cancelled: false, invoiceId: null, isDemo: false, createdAt: new Date().toISOString() }); const con = conOf(c.contractorId); c.payDate = con ? L.payDateFrom(L.endDate(c), con.payRule) : (s.payDate ? L.addDays(s.payDate, 7 * i) : ''); S.shifts.push(c); } }); },
+      withUndo(n > 1 ? `Added ${n} weekly shifts` : 'Shift duplicated', () => { for (let i = 1; i <= n; i++) { const c = JSON.parse(JSON.stringify(s)); Object.assign(c, { id: L.uid(), date: L.addDays(s.date, 7 * i), actualStart: null, actualEnd: null, cancelled: false, invoiceId: null, isDemo: false, createdAt: new Date().toISOString() }); const con = conOf(c.contractorId); c.payDate = con ? L.payDateForShift(c, con.payRule) : (s.payDate ? L.addDays(s.payDate, 7 * i) : ''); S.shifts.push(c); } }); },
     cancelShift: el => { const s = S.shifts.find(x => x.id === el.dataset.id); closeModal(); withUndo(s.cancelled ? 'Shift restored' : 'Shift cancelled', () => { s.cancelled = !s.cancelled; }); },
-    delShift: el => { const id = el.dataset.id; closeModal(); withUndo('Shift deleted', () => { S.shifts = S.shifts.filter(s => s.id !== id); S.payments.forEach(p => { p.allocations = (p.allocations || []).filter(a => a.shiftId !== id); }); S.payments = S.payments.filter(p => p.allocations.length); }); },
+    delShift: el => { const id = el.dataset.id; closeModal(); const had = S.payments.some(p => (p.allocations || []).some(a => a.shiftId === id));
+      withUndo(had ? 'Shift and its payment deleted' : 'Shift deleted', () => { S.shifts = S.shifts.filter(s => s.id !== id);
+        S.payments = S.payments.filter(p => { const al = p.allocations || []; if (!al.some(a => a.shiftId === id)) return true; const cut = al.filter(a => a.shiftId === id).reduce((x, a) => x + a.amountCents, 0); p.allocations = al.filter(a => a.shiftId !== id); p.amountCents = Math.max(0, p.amountCents - cut); return p.allocations.length > 0 || p.amountCents > 0; }); }); },
     startShift: el => { const s = S.shifts.find(x => x.id === el.dataset.id); const n = new Date(); s.actualStart = `${L.pad(n.getHours())}:${L.pad(n.getMinutes())}`; s.actualEnd = null; buzz(30); save(); render(); toast('Shift started ' + t(s.actualStart) + '. Stay safe!'); },
     endShift: el => { const s = S.shifts.find(x => x.id === el.dataset.id); const n = new Date(); const prev = s.actualEnd; s.actualEnd = `${L.pad(n.getHours())}:${L.pad(n.getMinutes())}`;
       const sp = L.shiftSpan(s); const gross = sp ? (sp.end - sp.start) / 60000 : 0;
@@ -2535,7 +2694,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
       if (gross > 20 * 60) { s.actualEnd = prev; render(); toast('Those times look wrong. Edit the shift to fix the start and end.'); return; }
       buzz([30, 40, 30]); save(); render(); toast(`Shift done · ${L.fmtHours(L.netMinutes(s))} · ${L.money(info(s).st.total)} earned`); },
     saveShift: () => saveShift(),
-    sfRule: () => { const f = sfRead(); const c = conOf(f.contractorId); if (!c) { toast('Choose a contractor first.'); return; } f._autoPay = true; $('#sf_pay').value = L.payDateFrom(L.endDate(f), c.payRule) || ''; sfLive(); },
+    sfRule: () => { const f = sfRead(); const c = conOf(f.contractorId); if (!c) { toast('Choose a contractor first.'); return; } f._autoPay = true; $('#sf_pay').value = L.payDateForShift(f, c.payRule) || ''; sfLive(); },
     payShift: el => payShiftModal(el.dataset.id),
     payPreset: el => { $('#pm_amt').value = L.centsToInput(+el.dataset.v); },
     savePayShift: el => savePayShift(el.dataset.id),
@@ -2544,9 +2703,16 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     lump: el => lumpModal(el.dataset.id || ''),
     saveLump: () => saveLump(),
     payView: el => { ui.payView = el.dataset.v; render(); },
+    morePaid: () => { ui.morePaid = true; render(); },
+    batchOpen: el => { const k = 'pp' + el.dataset.k; ui.open.has(k) ? ui.open.delete(k) : ui.open.add(k); render(); },
+    batchPaid: el => { const b = batches().find(x => x.key === el.dataset.k); if (!b) return; const con = conOf(b.contractorId) || {};
+      const allocs = b.shifts.filter(s => info(s).st.ended && info(s).st.owed > 0).map(s => ({ shiftId: s.id, amountCents: info(s).st.owed }));
+      const amt = allocs.reduce((a, x) => a + x.amountCents, 0); if (!amt) return; buzz();
+      withUndo(`Got ${L.money(amt)} from ${con.name || 'contractor'}`, () => S.payments.push({ id: L.uid(), contractorId: b.contractorId, date: today(), amountCents: amt, method: con.defaultMethod || METHODS[0], note: periodLabel(b), allocations: allocs, isDemo: false })); },
+    batchInvoice: el => { const b = batches().find(x => x.key === el.dataset.k); if (b) invoiceModal(b.contractorId, b.key); },
     scanMode: el => { ui.raw = ($('#rawIn') || {}).value || ui.raw; ui.scanMode = el.dataset.v; render(); },
     parse: () => doParse(),
-    sample: () => { ui.raw = 'Hi team, shifts this week:\nFri ' + L.fmtShort(L.addDays(today(), (5 - new Date().getDay() + 7) % 7 || 7)).slice(4) + ' Westfield Chermside\n6pm-2am  $35/hr\nSat ' + L.fmtShort(L.addDays(today(), (6 - new Date().getDay() + 7) % 7 || 7)).slice(4) + ' Suncorp 4-12\nContact Raj 0412 345 678\nPay Thursday after the shift'; render(); doParse(); },
+    sample: () => { ui.raw = 'Hi team, shifts this week:\nFri ' + L.fmtShort(L.addDays(today(), (5 - new Date().getDay() + 7) % 7 || 7)).slice(4) + ' Westfield Chermside\n5pm-1am  $35/hr\nSat ' + L.fmtShort(L.addDays(today(), (6 - new Date().getDay() + 7) % 7 || 7)).slice(4) + ' Suncorp 3-11\nContact Raj 0412 345 678\nPay Thursday after the shift'; render(); doParse(); },
     dropParsed: el => { ui.parsed.splice(+el.dataset.i, 1); $('#reviewArea').innerHTML = reviewHtml(); },
     discardParsed: () => { ui.parsed = []; ui._parsedOnce = false; $('#reviewArea').innerHTML = ''; },
     saveParsed: () => saveParsed(),
@@ -2554,7 +2720,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     calSel: el => { ui.calSel = el.dataset.d; render(); },
     ics: () => { const { ics, n } = buildIcs(); if (!n) { toast('No upcoming shifts or pay days to export.'); return; } saveFile('GuardShift_calendar.ics', 'text/calendar', ics); },
     licForm: el => licForm(el.dataset.id), licSave: el => licSave(el.dataset.id), licRenew: el => licRenew(el.dataset.id),
-    licRenewSave: async el => { const l = S.licences.find(x => x.id === el.dataset.id); const v = $('#lr_e').value; if (!v) return; const fl = [...($('#lr_files').files || [])]; const repl = $('#lr_replace').checked;
+    licRenewSave: async el => { const l = S.licences.find(x => x.id === el.dataset.id); const v = $('#lr_e').value; if (!v) { toast('Pick the new expiry date.'); return; } if (v <= today()) { toast('The new expiry date should be in the future.'); return; } const fl = [...($('#lr_files').files || [])]; const repl = $('#lr_replace').checked;
       l.expiry = v; closeModal(); if (fl.length) { const old = (l.files || []).slice(); const n = await addFilesTo(l.id, fl); if (n && repl) { l.files = l.files.filter(id => !old.includes(id)); deleteFileIds(old); } }
       save(); render(); toast('Expiry updated to ' + L.fmtDate(v)); },
     licDel: el => { const l = S.licences.find(x => x.id === el.dataset.id); const n = (l.files || []).length;
@@ -2575,9 +2741,12 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     conForm: el => conForm(el.dataset.id), conSave: el => conSave(el.dataset.id),
     conDel: el => { const c = conOf(el.dataset.id); if (S.shifts.some(s => s.contractorId === c.id)) withUndo(c.archived ? 'Restored' : 'Archived (history kept)', () => { c.archived = !c.archived; }); else withUndo('Contractor deleted', () => { S.contractors = S.contractors.filter(x => x.id !== c.id); }); },
     newInvoice: el => invoiceModal(el.dataset.id),
-    ivScope: el => { ivRead(); ui.invDraft.scope = el.dataset.v; ui.invDraft.picked = null; paintInvoiceModal(); },
+    ivScope: el => { ivRead(); const d = ui.invDraft; d.scope = el.dataset.v; d.picked = null;
+      if (d.scope === 'PERIOD') { const bs = invBatches(d.conId); if (!bs.some(b => b.key === d.batchKey)) d.batchKey = bs.length ? bs[0].key : ''; const b = bs.find(x => x.key === d.batchKey); if (b) d.dueDate = b.payDate < today() ? today() : b.payDate; }
+      paintInvoiceModal(); },
     ivCopy: () => { ivRead(); copyText(invText(buildInv(ui.invDraft)), 'Invoice text copied'); },
-    ivSave: () => { ivRead(); const inv = buildInv(ui.invDraft); if (!inv.lines.length) return; if (S.invoices.some(i => i.number === inv.number)) { toast('That invoice number is already used.'); return; }
+    ivSave: () => { ivRead(); const inv = buildInv(ui.invDraft); if (!inv.lines.length) return; if (!inv.number || !inv.number.trim()) { toast('Add an invoice number.'); return; } if (S.invoices.some(i => i.number === inv.number)) { toast('That invoice number is already used.'); return; }
+      if (inv.dueDate && inv.issueDate && inv.dueDate < inv.issueDate) { toast('Due date is before the issue date.'); return; }
       inv.id = L.uid(); inv.status = 'SENT'; S.invoices.push(inv); inv.shiftIds.forEach(id => { const s = S.shifts.find(x => x.id === id); if (s) s.invoiceId = inv.id; });
       const m = /(\d+)$/.exec(inv.number); if (m) S.profile.nextInvoiceSeq = Math.max(S.profile.nextInvoiceSeq || 1, +m[1] + 1);
       save(); render(); invoiceView(inv.id); toast('Invoice ' + inv.number + ' saved'); },
@@ -2590,9 +2759,13 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     pasteClip: async () => { try { const txt = await navigator.clipboard.readText(); if (!txt || !txt.trim()) { toast('Nothing copied yet. Copy the WhatsApp message first.'); return; } ui.raw = txt; render(); doParse(); } catch (e) { toast('Paste was blocked. Long-press the box and tap Paste.'); const r = $('#rawIn'); if (r) r.focus(); } },
     repeatRecent: el => { const s0 = S.shifts.find(x => x.id === el.dataset.id); if (!s0) return; let d = today(); const want = L.dow(s0.date); let k = 0; while (L.dow(d) !== want && k++ < 7) d = L.addDays(d, 1);
       shiftForm(null, { contractorId: s0.contractorId, supervisorName: s0.supervisorName, supervisorPhone: s0.supervisorPhone, siteName: s0.siteName, date: d, start: s0.start, end: s0.end, breakMin: s0.breakMin, rateType: s0.rateType, rateCents: s0.rateCents, flatCents: s0.flatCents, method: s0.method, notes: s0.notes }); },
+    keepDup: el => { ui.parsed[+el.dataset.i].edit.keepDup = true; render(); },
     ivCopyId: el => copyText(invText(S.invoices.find(i => i.id === el.dataset.id)), 'Invoice text copied'),
     ivDel: el => { const id = el.dataset.id; closeModal(); withUndo('Invoice deleted', () => { S.invoices = S.invoices.filter(i => i.id !== id); S.shifts.forEach(s => { if (s.invoiceId === id) s.invoiceId = null; }); }); },
-    saveProfile: () => { const g = k => $('#' + k).value.trim(); Object.assign(S.profile, { fullName: g('pf_name'), tradingName: g('pf_trade'), licenceNo: g('pf_lic'), email: g('pf_email'), phone: g('pf_phone'), bankName: g('pf_bank'), accountName: g('pf_accn'), bsb: g('pf_bsb'), accountNumber: g('pf_acc') }); save(); render(); toast('Details saved'); },
+    saveProfile: () => { const g = k => $('#' + k).value.trim();
+      const bsb = g('pf_bsb').replace(/\D/g, ''); if (bsb && bsb.length !== 6) { toast('BSB should be 6 digits, like 064-000.'); return; } if (bsb) $('#pf_bsb').value = bsb.slice(0, 3) + '-' + bsb.slice(3);
+      const acc = g('pf_acc').replace(/[\s-]/g, ''); if (acc && !/^\d{5,10}$/.test(acc)) { toast('Account number should be 5 to 10 digits.'); return; }
+      const em = g('pf_email'); if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { toast('Check the email address.'); return; } Object.assign(S.profile, { fullName: g('pf_name'), tradingName: g('pf_trade'), licenceNo: g('pf_lic'), email: g('pf_email'), phone: g('pf_phone'), bankName: g('pf_bank'), accountName: g('pf_accn'), bsb: g('pf_bsb'), accountNumber: g('pf_acc') }); save(); render(); toast('Details saved'); },
     saveSettings: () => { const st = S.settings; st.restHours = Math.max(0, parseFloat($('#st_rest').value) || 8); st.longHours = Math.max(1, parseFloat($('#st_long').value) || 12); st.weekHours = Math.max(1, parseFloat($('#st_week').value) || 50);
       st.weeklyGoal = Math.max(0, parseFloat($('#st_goal').value) || 0); st.haptics = $('#st_hap').value === '1'; st.nightMode = $('#st_night').value; ui.night = null;
       st.remindMin = +$('#st_rem').value; st.clock24 = $('#st_clock').value === '24'; st.includeBank = $('#st_bank').checked;
@@ -2642,18 +2815,24 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
     if (el.id === 'rawIn') { ui.raw = el.value; return; }
     if (el.closest && el.closest('#sf')) { if (el.id === 'sf_pay' && formShift) formShift._autoPay = false; sfLive(); return; }
     if (el.id && el.id.startsWith('lp_')) { lumpPrev(); return; }
-    const card = el.closest && el.closest('.review'); if (card && el.dataset.k) { const p = ui.parsed[+card.dataset.i]; p.edit[el.dataset.k] = el.value; if (el.dataset.k === 'contractorId' || el.dataset.k === 'rateType') { const c = conOf(p.edit.contractorId); if (el.dataset.k === 'contractorId' && c) { p.edit.method = c.defaultMethod || p.edit.method; if (!p.edit.supervisorPhone) p.edit.supervisorPhone = c.phone || ''; if (!p.edit.supervisorName) p.edit.supervisorName = c.contactName || ''; if (p.edit.date && p.edit.start && p.edit.end && !p.edit.payRuleFromMsg) p.edit.payDate = L.payDateFrom(L.endDate(candFromEdit(p.edit)), c.payRule) || p.edit.payDate; } } }
+    const card = el.closest && el.closest('.review'); if (card && el.dataset.k) { const p = ui.parsed[+card.dataset.i]; p.edit[el.dataset.k] = el.value; if (el.dataset.k === 'contractorId' || el.dataset.k === 'rateType') { const c = conOf(p.edit.contractorId); if (el.dataset.k === 'contractorId' && c) { p.edit.method = c.defaultMethod || p.edit.method; if (!p.edit.supervisorPhone) p.edit.supervisorPhone = c.phone || ''; if (!p.edit.supervisorName) p.edit.supervisorName = c.contactName || ''; } }
+      if (el.dataset.k === 'payDate') p.edit._payTouched = true;
+      if (['contractorId', 'date', 'start', 'end'].includes(el.dataset.k) && !p.edit._payTouched && p.edit.date && p.edit.start && p.edit.end) {
+        const c = conOf(p.edit.contractorId); const mr = p.edit.payRuleFromMsg;
+        const rule = c && c.payRule && (!mr || mr.check || mr.type === c.payRule.type) ? c.payRule : mr || (c && c.payRule);
+        const pd = rule ? L.payDateForShift(candFromEdit(p.edit), rule) : L.addDays(L.endDate(candFromEdit(p.edit)), 7); if (pd) p.edit.payDate = pd; } }
   });
   document.addEventListener('change', e => {
     const el = e.target;
     if ((el.id === 'photoIn' || el.id === 'photoCam') && el.files && el.files[0]) { runOCR(el.files[0]); return; }
     if (el.id === 'restoreFile' && el.files && el.files[0]) { const r = new FileReader(); r.onload = () => restorePreview(String(r.result)); r.readAsText(el.files[0]); return; }
     if (el.id === 'cf_pt') { cfRuleBox({}); return; }
+    if (el.id === 'cf_ps' || el.id === 'cf_pa') { cfPreview(); return; }
     if (el.dataset && el.dataset.docPick) { el.checked ? ui.docSel.add(el.dataset.docPick) : ui.docSel.delete(el.dataset.docPick); render(); return; }
     if (el.id === 'docFileIn' && el.files && el.files.length) { const id = ui.fileTarget; const fl = [...el.files]; addFilesTo(id, fl).then(n => { render(); if (n) toast(`Added ${n} file${n > 1 ? 's' : ''}`); }); return; }
     if (el.id === 'lf_noexp') { $('#lf_eBox').hidden = el.checked; return; }
     if (el.dataset && el.dataset.ivPick) { ivRead(); const d = ui.invDraft; const cands = invCandidates(d); const picked = new Set(d.picked || cands.map(s => s.id)); el.checked ? picked.add(el.dataset.ivPick) : picked.delete(el.dataset.ivPick); d.picked = [...picked]; paintInvoiceModal(); return; }
-    if (el.id === 'iv_con' || el.id === 'iv_from' || el.id === 'iv_to' || el.id === 'iv_iss') { ivRead(); paintInvoiceModal(); return; }
+    if (el.id === 'iv_con' || el.id === 'iv_batch' || el.id === 'iv_from' || el.id === 'iv_to' || el.id === 'iv_iss') { ivRead(); paintInvoiceModal(); return; }
     const card = el.closest && el.closest('.review'); if (card && el.dataset.k) {
       if (el.tagName === 'SELECT' || el.type === 'date' || el.type === 'time') { const ra = $('#reviewArea'); const y = window.scrollY; ra.innerHTML = reviewHtml(); window.scrollTo(0, y); }
       else paintReviewLive(+card.dataset.i);
@@ -2665,7 +2844,7 @@ body.night #app, body.night .nav, body.night .modal { filter: brightness(.68) sa
 
   const migrate = () => {
     if (S.profile) { delete S.profile.abn; delete S.profile.gstRegistered; }
-    (S.contractors || []).forEach(c => { delete c.abn; });
+    (S.contractors || []).forEach(c => { delete c.abn; if (c.payRule && (c.payRule.type === 'FORTNIGHTLY' || c.payRule.type === 'WEEKLY') && !c.payRule.periodStart) c.payRule = L.normRule(c.payRule); });
     (S.invoices || []).forEach(i => { delete i.contractorAbn; delete i.gst; if (i.profile) delete i.profile.abn; if (i.totals) { delete i.totals.gst; i.totals.due = i.totals.gross - i.totals.paid; } });
     S.settings = Object.assign(blank().settings, S.settings || {});
   };
